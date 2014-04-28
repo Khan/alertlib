@@ -81,41 +81,123 @@ _PAGERDUTY_ILLEGAL_CHARS = re.compile(r'[!A-Za-z0-9._-]')
 
 
 class Alert(object):
-    def __init__(self, message, html=False):
-        """html: True if the message should be treated as html, not text."""
+    def __init__(self, message, summary=None, severity=logging.INFO,
+                 html=False):
+        """Arguments:
+
+        message: the message to alert
+        summary: a summary of the message, used as subject lines for email,
+            for instance.  If omitted, the summary is taken as the first
+            sentence of the message (but only when html==False), up to
+            60 characters.
+        severity: can be any logging level (ERROR, CRITICAL, INFO, etc).
+            We do our best to encode the severity into each backend to
+            the extent it's practical.
+        html: True if the message should be treated as html, not text.
+        """
         self.message = message
+        self.summary = summary
+        self.severity = severity
         self.html = html
 
-    def send_to_hipchat(self, room_name, color="purple",
-                        notify=False):
+    def _get_summary(self):
+        """Return the summary as given, or auto-extracted if necessary."""
+        if self.summary is not None:
+            return self.summary
+
+        if not self.message:
+            return ''
+
+        # TODO(csilvers): turn html to text, *then* extract the summary.
+        if self.html:
+            return ''
+
+        summary = (self.message or '').splitlines()[0][:60]
+        if '.' in summary:
+            summary = summary[:summary.find('.')]
+
+        # Let's indicate the severity in the summary, as well
+        log_priority_to_prefix = {
+            logging.DEBUG: "(debug info) ",
+            logging.INFO: "",
+            logging.WARNING: "WARNING: ",
+            logging.ERROR: "ERROR: ",
+            logging.CRITICAL: "**CRITICAL ERROR**: ",
+            }
+        summary = log_priority_to_prefix.get(self.severity, "") + summary
+
+        return summary
+
+    def _mapped_severity(self, severity_map):
+        """Given a map from log-level to stuff, return the 'stuff' for us.
+
+        If the map is missing an entry for a given severity level, then we
+        return the value for map[INFO].
+        """
+        return severity_map.get(self.severity, severity_map[logging.INFO])
+
+    # ----------------- HIPCHAT ------------------------------------------
+
+    _LOG_PRIORITY_TO_COLOR = {
+        logging.DEBUG: "gray",
+        logging.INFO: "purple",
+        logging.WARNING: "yellow",
+        logging.ERROR: "red",
+        logging.CRITICAL: "red",
+        }
+
+    def _post_to_hipchat(self, post_dict):
+        r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message'
+                            '?auth_token=%s' % hipchat_token,
+                            urllib.urlencode(post_dict))
+        if r.getcode() != 200:
+            logging.error('Failed sending to hipchat: %s' % r.read())
+
+    def send_to_hipchat(self, room_name, color=None,
+                        notify=None):
         """
         Arguments:
             room_name: e.g. '1s and 0s'.
             color: background color, one of "yellow", "red", "green",
-                "purple", "gray", or "random".
+                "purple", "gray", or "random".  If None, we pick the
+                color automatically based on self.severity.
             notify: should we cause hipchat to beep when sending this.
+                If None, we pick the notification automatically based
+                on self.severity
         """
+        if color is None:
+            color = self._mapped_severity(self._LOG_PRIORITY_TO_COLOR)
+
+        if notify is None:
+            notify = (self.priority == logging.CRITICAL)
+
+        if self.summary:
+            self._post_to_hipchat({
+                'room_id': room_name,
+                'from': 'alertlib',
+                'message': self.summary,
+                'message_format': 'text',
+                'notify': 0,
+                'color': color})
+
         # hipchat has a 10,000 char limit on messages, we leave some leeway
         message = self.message[:9000]
 
-        post_data = urllib.urlencode({
+        self._post_to_hipchat({
                 'room_id': room_name,
                 'from': 'alertlib',
                 'message': message,
                 'message_format': 'html' if self.html else 'text',
                 'notify': int(notify),
                 'color': color})
-        r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message'
-                            '?auth_token=%s' % hipchat_token,
-                            post_data)
-        if r.getcode() != 200:
-            logging.error('Failed sending to hipchat: %s' % r.read())
 
         return self      # so we can chain the method calls
 
-    def _send_to_gae_email(self, email_addresses, subject, cc=None, bcc=None):
+    # ----------------- EMAIL --------------------------------------------
+
+    def _send_to_gae_email(self, email_addresses, cc=None, bcc=None):
         gae_mail_args = {
-            'subject': subject,
+            'subject': self._get_summary(),
             'sender': 'alertlib <no-reply@khanacademy.org>',
             'to': email_addresses,      # "x@y" or "Full Name <x@y>"
             }
@@ -131,12 +213,16 @@ class Alert(object):
             gae_mail_args['body'] = self.message
         google.appengine.api.mail.send_mail(**gae_mail_args)
 
-    def _send_to_sendmail(self, email_addresses, subject, cc=None, bcc=None):
+    def _send_to_sendmail(self, email_addresses, cc=None, bcc=None):
         msg = email.mime.text.MIMEText(self.message,
                                        'html' if self.html else 'text')
-        msg['Subject'] = subject
+        msg['Subject'] = self._get_summary()
         msg['From'] = 'alertlib <no-reply@khanacademy.org>'
         msg['To'] = email_addresses
+        # We could pass the priority in the 'Importance' header, but
+        # since nobody pays attention to that (and we can't even set
+        # that header when sending from appengine), we just use the
+        # fact it's embedded in the subject line.
         if cc:
             if not isinstance(cc, basestring):
                 cc = ', '.join(cc)
@@ -155,25 +241,25 @@ class Alert(object):
         s.sendmail('no-reply@khanacademy.org', to_emails, msg.as_string())
         s.quit()
 
-    def _send_to_email(self, email_addresses, subject, cc=None, bcc=None):
+    def _send_to_email(self, email_addresses, cc=None, bcc=None):
         """An internal routine; email_addresses must be full addresses."""
         # Try sending to appengine first.
         try:
-            self._send_to_gae_email(email_addresses, subject, cc, bcc)
+            self._send_to_gae_email(email_addresses, cc, bcc)
             return
         except (NameError, AssertionError), why:
             pass
 
         # Try using local smtp.
         try:
-            self._send_to_sendmail(email_addresses, subject, cc, bcc)
+            self._send_to_sendmail(email_addresses, cc, bcc)
             return
         except (NameError, smtplib.SMTPException), why:
             pass
 
         logging.error('Failed sending email: %s' % why)
 
-    def send_to_email(self, email_usernames, subject, cc=None, bcc=None):
+    def send_to_email(self, email_usernames, cc=None, bcc=None):
         """Send the message to a khan academy email account.
 
         (We *could* send emails outside ka.org, but right now the API
@@ -182,12 +268,16 @@ class Alert(object):
         better would be to create a new API endpoint like PagerDuty
         does.)
 
+        The subject of the email is taken from the 'summary' field
+        given to the Alert constructor, or is taken to be the first
+        sentence of the message otherwise.  The subject will also be
+        prepended with the severity of the alert, if not INFO.
+
         Arguments:
             email_usernames: an username to send the email to, or
                 else a list of such usernames.  This is the mail
-                username: so foo in 'foo@khanacademy.org'.  You do
+                username: so 'foo' in 'foo@khanacademy.org'.  You do
                 not need to specify 'khanacademy.org'.
-            subject: the subject line of the email.
             cc / bcc: who to cc/bcc on the email.  Takes usernames as
                 a string or list, same as email_usernames.
         """
@@ -208,16 +298,17 @@ class Alert(object):
         cc = _normalize(cc)
         bcc = _normalize(bcc)
 
-        self._send_to_email(email_addresses, subject, cc, bcc)
+        self._send_to_email(email_addresses, cc, bcc)
 
-    def send_to_pagerduty(self, pagerduty_servicenames, summary=''):
+    # ----------------- PAGERDUTY ----------------------------------------
+
+    def send_to_pagerduty(self, pagerduty_servicenames):
         """Send an incident report to PagerDuty.
 
         Arguments:
             pagerduty_servicenames: either a string, or a list of
                  strings, that are the names of PagerDuty services.
                  https://www.pagerduty.com/docs/guides/email-integration-guide/
-            subject: A short summary of the incident.
         """
         def _service_name_to_email(lst):
             if isinstance(lst, basestring):
@@ -231,37 +322,26 @@ class Alert(object):
                 lst[i] += '@khan-academy.pagerduty.com'
             return lst
 
-        if not summary:
-            # Use the first 60 chars, or first sentence, as the summary
-            summary = self.message.splitlines()[0][:60]
-            if '.' in summary:
-                summary = summary[:summary.find('.')]
-
         email_addresses = _service_name_to_email(pagerduty_servicenames)
-        self._send_to_email(email_addresses, summary)
+        self._send_to_email(email_addresses)
 
-    def send_to_logs(self, priority):
-        """Send to logs: either GAE logs (for appengine) or syslog.
+    # ----------------- LOGS ---------------------------------------------
 
-        Arguments:
-            priority: one of logging.DEBUG, logging.INFO, logging.WARNING,
-                logging.ERROR, or logging.CRITICAL.
-        """
-        logging.log(priority, self.message)
+    _LOG_TO_SYSLOG = {
+        logging.DEBUG: syslog.LOG_DEBUG,
+        logging.INFO: syslog.LOG_INFO,
+        logging.WARNING: syslog.LOG_WARNING,
+        logging.ERROR: syslog.LOG_ERR,
+        logging.CRITICAL: syslog.LOG_CRIT
+        }
+
+    def send_to_logs(self):
+        """Send to logs: either GAE logs (for appengine) or syslog."""
+        logging.log(self.severity, self.message)
 
         # Also send to syslog if we can.
         try:
-            log_priority_to_syslog_priority = {
-                logging.DEBUG: syslog.LOG_DEBUG,
-                logging.INFO: syslog.LOG_INFO,
-                logging.WARNING: syslog.LOG_WARNING,
-                logging.ERROR: syslog.LOG_ERR,
-                logging.CRITICAL: syslog.LOG_CRIT
-                }
-            try:
-                syslog_priority = log_priority_to_syslog_priority[priority]
-            except KeyError:
-                raise ValueError('priority must be one of the logging levels.')
+            syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
             syslog.syslog(self.message, syslog_priority)
         except NameError:
             pass
