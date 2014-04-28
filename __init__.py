@@ -76,7 +76,7 @@ hipchat_token = secrets.hipchat_deploy_token
 
 # We want to convert a PagerDuty service name to an email address
 # using the same rules pager-duty does.  From experimentation it seems
-# to ignore everything but a-zA-Z0-0_-., and lowercases all letters.
+# to ignore everything but a-zA-Z0-9_-., and lowercases all letters.
 _PAGERDUTY_ILLEGAL_CHARS = re.compile(r'[!A-Za-z0-9._-]')
 
 
@@ -109,6 +109,12 @@ class Alert(object):
             return ''
 
         # TODO(csilvers): turn html to text, *then* extract the summary.
+        # Maybe something like:
+        # s = lxml.html.fragment_fromstring(
+        #       "  Hi there,\n<a href='/'> Craig</a> ", create_parent='div'
+        #       ).xpath("string()")
+        # ' '.join(s.split()).strip()
+        # Or https://github.com/aaronsw/html2text
         if self.html:
             return ''
 
@@ -174,7 +180,7 @@ class Alert(object):
         if self.summary:
             self._post_to_hipchat({
                 'room_id': room_name,
-                'from': 'alertlib',
+                'from': 'AlertiGator',
                 'message': self.summary,
                 'message_format': 'text',
                 'notify': 0,
@@ -185,7 +191,7 @@ class Alert(object):
 
         self._post_to_hipchat({
                 'room_id': room_name,
-                'from': 'alertlib',
+                'from': 'AlertiGator',
                 'message': message,
                 'message_format': 'html' if self.html else 'text',
                 'notify': int(notify),
@@ -207,6 +213,7 @@ class Alert(object):
             gae_mail_args['bcc'] = bcc
         if self.html:
             # TODO(csilvers): convert the html to text for 'body'.
+            # (see above about using html2text or similar).
             gae_mail_args['body'] = self.message
             gae_mail_args['html'] = self.message
         else:
