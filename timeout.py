@@ -6,6 +6,7 @@ The basic recipe is taken from
    http://stackoverflow.com/questions/1191374/subprocess-with-timeout
 """
 
+import logging
 import os
 import signal
 import subprocess
@@ -15,8 +16,11 @@ import alert
 
 def setup_parser():
     """Create an ArgumentParser for timeout-alerting."""
+    # If logging the fact a timeout happened, ERROR is a more
+    # reasonable default logging error than INFO.
+    alert.DEFAULT_SEVERITY = logging.ERROR
+
     parser = alert.setup_parser()
-    # TODO(csilvers): change the default severity to ERROR in this case.
 
     # Add a few timeout-specified flags, taken from 'man timeout.'
     parser.add_argument('-k', '--kill-after', type=int,
@@ -44,6 +48,8 @@ class _Alarm(Exception):
 
 
 def _get_process_children(pid):
+    # TODO(csilvers): get this working with OS X as well.
+    # Can do via: "ps -o pid,ppid" and grep for ppid's that match str(pid).
     p = subprocess.Popen(
         ['ps', '--no-headers', '-o', 'pid', '--ppid', str(pid)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)

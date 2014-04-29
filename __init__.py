@@ -10,12 +10,13 @@ USAGE:
        .send_to_hipchat(...)
        .send_to_email(...)
        .send_to_pagerduty(...)
+       .send_to_graphite(...)
 
 or, if you don't like chaining:
    alert = alertlib.Alert("message")
    alert.send_to_hipchat(...)
    alert.send_to_email(...)
-   alert.send_to_pagerduty(...)
+   [etc]
 
 
 The backends supported are:
@@ -24,6 +25,7 @@ The backends supported are:
     * KA email
     * KA PagerDuty account
     * Logs -- GAE logs on appengine, or syslogs on a unix box
+    * Graphite -- update a counter to indicate this alert happened
 
 You can send an alert to one or more of these.
 
@@ -48,6 +50,8 @@ you're using this within an appengine app) and sendmail.
 
 import logging
 import re
+import socket
+import time
 import urllib
 import urllib2
 
@@ -72,12 +76,40 @@ except ImportError:
 # If this fails, you don't have secrets.py set up as needed for this lib.
 import secrets
 hipchat_token = secrets.hipchat_deploy_token
+hostedgraphite_api_key = secrets.hostedgraphite_api_key
 
 
 # We want to convert a PagerDuty service name to an email address
 # using the same rules pager-duty does.  From experimentation it seems
 # to ignore everything but a-zA-Z0-9_-., and lowercases all letters.
 _PAGERDUTY_ILLEGAL_CHARS = re.compile(r'[!A-Za-z0-9._-]')
+
+
+_GRAPHITE_SOCKET = None
+_LAST_GRAPHITE_TIME = None
+
+
+def _graphite_socket(graphite_hostport):
+    """Return a socket to graphite, creating a new one every 10 minutes.
+
+    We re-create every 10 minutes in case the DNS entry has changed; that
+    way we lose at most 10 minutes' worth of data.  graphite_hostport
+    is, for instance 'carbon.hostedgraphite.com:2003'.  This should be
+    for talking the TCP protocol (to mark failures, we want to be more
+    reliable than UDP!)
+    """
+    global _GRAPHITE_SOCKET, _LAST_GRAPHITE_TIME
+    if _GRAPHITE_SOCKET is None or time.time() - _LAST_GRAPHITE_TIME > 600:
+        if _GRAPHITE_SOCKET:
+            _GRAPHITE_SOCKET.close()
+        (hostname, port_string) = graphite_hostport.split(':')
+        host_ip = socket.gethostbyname(hostname)
+        port = int(port_string)
+        _GRAPHITE_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _GRAPHITE_SOCKET.connect((host_ip, port))
+        _LAST_GRAPHITE_TIME = time.time()
+
+    return _GRAPHITE_SOCKET
 
 
 class Alert(object):
@@ -307,6 +339,8 @@ class Alert(object):
 
         self._send_to_email(email_addresses, cc, bcc)
 
+        return self
+
     # ----------------- PAGERDUTY ----------------------------------------
 
     def send_to_pagerduty(self, pagerduty_servicenames):
@@ -332,6 +366,8 @@ class Alert(object):
         email_addresses = _service_name_to_email(pagerduty_servicenames)
         self._send_to_email(email_addresses)
 
+        return self
+
     # ----------------- LOGS ---------------------------------------------
 
     _LOG_TO_SYSLOG = {
@@ -352,3 +388,20 @@ class Alert(object):
             syslog.syslog(syslog_priority, self.message)
         except NameError:
             pass
+
+        return self
+
+    # ----------------- GRAPHITE -----------------------------------------
+
+    DEFAULT_GRAPHITE_HOST = 'carbon.hostedgraphite.com:2003'
+
+    def send_to_graphite(self, statistic, value=1,
+                         graphite_host=DEFAULT_GRAPHITE_HOST):
+        """Increment the given counter on a graphite/statds instance.
+
+        statistic should be a dotted name as used by graphite: e.g.
+        myapp.stats.num_failures.  When send_to_graphite() is called,
+        we send the given value for that statistic to graphite.
+        """
+        _graphite_socket(graphite_host).send('%s.%s %s' % (
+                hostedgraphite_api_key, statistic, value))

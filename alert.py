@@ -16,6 +16,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import alertlib
 
 
+DEFAULT_SEVERITY = logging.INFO
+
+
 class _MakeList(argparse.Action):
     """Parse the argument as a comma-separated list."""
     def __call__(self, parser, namespace, value, option_string=None):
@@ -54,22 +57,28 @@ def setup_parser():
                               'if missing we figure it out automatically. '))
     parser.add_argument('--logs', action='store_true',
                         help=('Send to syslog.  May specify --severity.'))
+    parser.add_argument('--graphite', default=[], action=_MakeList,
+                        help=('Send to graphite.  Argument is a comma-'
+                              'separted list of statistics to update. '
+                              'May specify --graphite_val and '
+                              '--graphite_host.'))
 
     parser.add_argument('--summary', default=None,
                         help=('Summary used as subject lines for emails, etc. '
                               'If omitted, we figure it out automatically '
                               'from the alert message.  To suppress entirely, '
                               'pass --summary=""'))
-    parser.add_argument('--severity', default=logging.INFO,
+    parser.add_argument('--severity', default=DEFAULT_SEVERITY,
                         choices=['debug', 'info', 'warning', 'error',
                                  'critical'],
                         action=_ParseSeverity,
                         help=('Severity of the message, which may affect '
-                              'how we alert (default: INFO)'))
+                              'how we alert (default: %(default)s)'))
     parser.add_argument('--color', default=None,
                         choices=['yellow', 'red', 'green', 'purple',
                                  'gray', 'random'],
-                        help=('Background color when sending to hipchat'))
+                        help=('Background color when sending to hipchat '
+                              '(default depends on severity)'))
     parser.add_argument('--notify', action='store_true', default=None,
                         help=('Cause a beep when sending to hipchat'))
     parser.add_argument('--cc', default=[], action=_MakeList,
@@ -78,6 +87,14 @@ def setup_parser():
     parser.add_argument('--bcc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
+    parser.add_argument('--graphite_value', default=1, type=int,
+                        help=('Value to send to graphite for each of the '
+                              'graphite statistics specified '
+                              '(default %(default)s)'))
+    parser.add_argument('--graphite_host',
+                        default=alertlib.Alert.DEFAULT_GRAPHITE_HOST,
+                        help=('host:port to send graphite data to '
+                              '(default %(default)s)'))
     return parser
 
 
@@ -95,6 +112,10 @@ def alert(message, args):
 
     if args.logs:
         a.send_to_logs()
+
+    for statistic in args.graphite:
+        a.send_to_graphite(statistic, args.graphite_value,
+                           args.graphite_host)
 
 
 def main():

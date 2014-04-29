@@ -10,6 +10,7 @@ alert to any or all of
    * PagerDuty
    * khanacademy.org email lists
    * GAE logs and/or syslog
+   * Graphite/StatsD
 
 You must provide a decrypted secrets.py (from the webapp repo) to use
 these services.
