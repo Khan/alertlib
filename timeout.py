@@ -2,6 +2,9 @@
 
 """Run the specified command, and alert if it doesn't finish in time.
 
+We return the return-code of the specified command, or 127 if the
+command did not finish in time.
+
 The basic recipe is taken from
    http://stackoverflow.com/questions/1191374/subprocess-with-timeout
 """
@@ -10,6 +13,7 @@ import logging
 import os
 import signal
 import subprocess
+import sys
 
 import alert
 
@@ -85,23 +89,29 @@ def _run_with_timeout(p, timeout, kill_signal, kill_tree=True):
 
 def run_with_timeout(timeout, args, kill_signal, kill_after=None,
                      cwd=None, kill_tree=True):
-    """Run a command with a timeout after which it will be forcibly killed."""
+    """Run a command with a timeout after which it will be forcibly killed.
+
+    If we forcibly kill, we return rc 127, otherwise we return whatever
+    the command would.
+    """
     p = subprocess.Popen(args, shell=False, cwd=cwd)
 
     finished = _run_with_timeout(p, timeout, kill_signal, kill_tree)
     if not finished:
         if kill_after:
             _run_with_timeout(p, kill_after, signal.KILL, kill_tree)
-    return finished
+    return p.returncode if finished else 127
 
 
 def main():
     parser = setup_parser()
     args = parser.parse_args()
-    finished = run_with_timeout(args.duration, [args.command] + args.arg,
-                                args.signal, args.kill_after, args.cwd)
-    if not finished:
+    rc = run_with_timeout(args.duration, [args.command] + args.arg,
+                          args.signal, args.kill_after, args.cwd)
+    if rc == 127:
         alert.alert('TIMEOUT running %s' % args.command, args)
+    return rc
+
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
