@@ -349,6 +349,6 @@ class Alert(object):
         # Also send to syslog if we can.
         try:
             syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
-            syslog.syslog(self.message, syslog_priority)
+            syslog.syslog(syslog_priority, self.message)
         except NameError:
             pass
