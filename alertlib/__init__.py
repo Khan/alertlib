@@ -10,6 +10,7 @@ USAGE:
        .send_to_hipchat(...)
        .send_to_email(...)
        .send_to_pagerduty(...)
+       .send_to_logs(...)
        .send_to_graphite(...)
 
 or, if you don't like chaining:
@@ -56,9 +57,13 @@ import urllib
 import urllib2
 
 try:
-    import google.appengine.api.mail
+    # We use the simpler name here just to make it easier to mock for tests
+    import google.appengine.api.mail as google_mail
 except ImportError:
-    pass
+    try:
+        import google_mail      # defined by alertlib_test.py
+    except ImportError:
+        pass
 
 try:
     import email
@@ -82,7 +87,7 @@ hostedgraphite_api_key = secrets.hostedgraphite_api_key
 # We want to convert a PagerDuty service name to an email address
 # using the same rules pager-duty does.  From experimentation it seems
 # to ignore everything but a-zA-Z0-9_-., and lowercases all letters.
-_PAGERDUTY_ILLEGAL_CHARS = re.compile(r'[!A-Za-z0-9._-]')
+_PAGERDUTY_ILLEGAL_CHARS = re.compile(r'[^A-Za-z0-9._-]')
 
 
 _GRAPHITE_SOCKET = None
@@ -207,7 +212,7 @@ class Alert(object):
             color = self._mapped_severity(self._LOG_PRIORITY_TO_COLOR)
 
         if notify is None:
-            notify = (self.priority == logging.CRITICAL)
+            notify = (self.severity == logging.CRITICAL)
 
         if self.summary:
             self._post_to_hipchat({
@@ -250,7 +255,7 @@ class Alert(object):
             gae_mail_args['html'] = self.message
         else:
             gae_mail_args['body'] = self.message
-        google.appengine.api.mail.send_mail(**gae_mail_args)
+        google_mail.send_mail(**gae_mail_args)
 
     def _send_to_sendmail(self, email_addresses, cc=None, bcc=None):
         msg = email.mime.text.MIMEText(self.message,
@@ -324,7 +329,7 @@ class Alert(object):
             if lst is None:
                 return None
             if isinstance(lst, basestring):
-                lst = list(lst)
+                lst = [lst]
             for i in xrange(len(lst)):
                 if not lst[i].endswith('@khanacademy.org'):
                     if '@' in lst[i]:
@@ -353,7 +358,7 @@ class Alert(object):
         """
         def _service_name_to_email(lst):
             if isinstance(lst, basestring):
-                lst = list(lst)
+                lst = [lst]
             for i in xrange(len(lst)):
                 if '@' in lst[i]:
                     raise ValueError('Specify PagerDuty service names, '
@@ -405,3 +410,5 @@ class Alert(object):
         """
         _graphite_socket(graphite_host).send('%s.%s %s' % (
                 hostedgraphite_api_key, statistic, value))
+
+        return self
