@@ -645,6 +645,25 @@ class IntegrationTest(TestBase):
         self.assertEqual(['<hostedgraphite API key>.stats.alerted 1'],
                          self.sent_to_graphite)
 
+    def test_gae_sandbox(self):
+        # Stub out imports just like appengine would.
+        old_smtplib = alertlib.smtplib
+        old_syslog = alertlib.syslog
+        try:
+            del alertlib.smtplib
+            del alertlib.syslog
+
+            # Just make sure nothing crashes
+            alertlib.Alert('test message') \
+                .send_to_hipchat('1s and 0s') \
+                .send_to_email('ka-admin') \
+                .send_to_pagerduty('oncall') \
+                .send_to_logs() \
+                .send_to_graphite('stats.alerted')
+        finally:
+            alertlib.smtplib = old_smtplib
+            alertlib.syslog = old_syslog
+
 
 if __name__ == '__main__':
     unittest.main()

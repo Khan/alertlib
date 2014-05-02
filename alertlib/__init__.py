@@ -378,13 +378,16 @@ class Alert(object):
 
     # ----------------- LOGS ---------------------------------------------
 
-    _LOG_TO_SYSLOG = {
-        logging.DEBUG: syslog.LOG_DEBUG,
-        logging.INFO: syslog.LOG_INFO,
-        logging.WARNING: syslog.LOG_WARNING,
-        logging.ERROR: syslog.LOG_ERR,
-        logging.CRITICAL: syslog.LOG_CRIT
-        }
+    try:
+        _LOG_TO_SYSLOG = {
+            logging.DEBUG: syslog.LOG_DEBUG,
+            logging.INFO: syslog.LOG_INFO,
+            logging.WARNING: syslog.LOG_WARNING,
+            logging.ERROR: syslog.LOG_ERR,
+            logging.CRITICAL: syslog.LOG_CRIT
+            }
+    except NameError:     # can't load syslog
+        _LOG_TO_SYSLOG = {}
 
     def send_to_logs(self):
         """Send to logs: either GAE logs (for appengine) or syslog."""
