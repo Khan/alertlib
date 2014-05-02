@@ -238,7 +238,7 @@ class Alert(object):
 
     # ----------------- EMAIL --------------------------------------------
 
-    def _send_to_gae_email(self, email_addresses, cc=None, bcc=None):
+    def _send_to_gae_email(self, message, email_addresses, cc=None, bcc=None):
         gae_mail_args = {
             'subject': self._get_summary(),
             'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -251,18 +251,18 @@ class Alert(object):
         if self.html:
             # TODO(csilvers): convert the html to text for 'body'.
             # (see above about using html2text or similar).
-            gae_mail_args['body'] = self.message
-            gae_mail_args['html'] = self.message
+            gae_mail_args['body'] = message
+            gae_mail_args['html'] = message
         else:
-            gae_mail_args['body'] = self.message
+            gae_mail_args['body'] = message
         google_mail.send_mail(**gae_mail_args)
 
-    def _send_to_sendmail(self, email_addresses, cc=None, bcc=None):
-        msg = email.mime.text.MIMEText(self.message,
+    def _send_to_sendmail(self, message, email_addresses, cc=None, bcc=None):
+        msg = email.mime.text.MIMEText(message,
                                        'html' if self.html else 'text')
         msg['Subject'] = self._get_summary()
         msg['From'] = 'alertlib <no-reply@khanacademy.org>'
-        msg['To'] = email_addresses
+        msg['To'] = ', '.join(email_addresses)
         # We could pass the priority in the 'Importance' header, but
         # since nobody pays attention to that (and we can't even set
         # that header when sending from appengine), we just use the
@@ -270,11 +270,11 @@ class Alert(object):
         if cc:
             if not isinstance(cc, basestring):
                 cc = ', '.join(cc)
-            msg['cc'] = cc
+            msg['Cc'] = cc
         if bcc:
             if not isinstance(bcc, basestring):
                 bcc = ', '.join(bcc)
-            msg['bcc'] = bcc
+            msg['Bcc'] = bcc
 
         # I think sendmail wants just email addresses, so extract
         # them in case the user specified "Name <email>".
@@ -287,16 +287,19 @@ class Alert(object):
 
     def _send_to_email(self, email_addresses, cc=None, bcc=None):
         """An internal routine; email_addresses must be full addresses."""
+        # Make sure the email text ends in a single newline.
+        message = self.message.rstrip('\n') + '\n'
+
         # Try sending to appengine first.
         try:
-            self._send_to_gae_email(email_addresses, cc, bcc)
+            self._send_to_gae_email(message, email_addresses, cc, bcc)
             return
         except (NameError, AssertionError), why:
             pass
 
         # Try using local smtp.
         try:
-            self._send_to_sendmail(email_addresses, cc, bcc)
+            self._send_to_sendmail(message, email_addresses, cc, bcc)
             return
         except (NameError, smtplib.SMTPException), why:
             pass
