@@ -79,9 +79,13 @@ except ImportError:
     pass
 
 # If this fails, you don't have secrets.py set up as needed for this lib.
-import secrets
-hipchat_token = secrets.hipchat_deploy_token
-hostedgraphite_api_key = secrets.hostedgraphite_api_key
+try:
+    import secrets
+    hipchat_token = secrets.hipchat_deploy_token
+    hostedgraphite_api_key = secrets.hostedgraphite_api_key
+except ImportError:
+    hipchat_token = None
+    hostedgraphite_api_key = None
 
 
 # We want to convert a PagerDuty service name to an email address
@@ -190,6 +194,11 @@ class Alert(object):
         }
 
     def _post_to_hipchat(self, post_dict):
+        if not hipchat_token:
+            logging.warning("Not sending this to hipchat (no token found): %s"
+                            % post_dict)
+            return
+
         r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message'
                             '?auth_token=%s' % hipchat_token,
                             urllib.urlencode(post_dict))
@@ -414,6 +423,11 @@ class Alert(object):
         myapp.stats.num_failures.  When send_to_graphite() is called,
         we send the given value for that statistic to graphite.
         """
+        if not hostedgraphite_api_key:
+            logging.warning("Not sending to graphite; no API key found: %s %s"
+                            % (statistic, value))
+            return
+
         _graphite_socket(graphite_host).send('%s.%s %s' % (
                 hostedgraphite_api_key, statistic, value))
 
