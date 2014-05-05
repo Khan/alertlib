@@ -98,6 +98,20 @@ _GRAPHITE_SOCKET = None
 _LAST_GRAPHITE_TIME = None
 
 
+_TEST_MODE = False
+
+
+def enter_test_mode():
+    """In test mode, we just log what we'd do, but don't actually do it."""
+    global _TEST_MODE
+    _TEST_MODE = True
+
+
+def exit_test_mode():
+    global _TEST_MODE
+    _TEST_MODE = False
+
+
 def _graphite_socket(graphite_hostport):
     """Return a socket to graphite, creating a new one every 10 minutes.
 
@@ -235,7 +249,11 @@ class Alert(object):
         # hipchat has a 10,000 char limit on messages, we leave some leeway
         message = self.message[:9000]
 
-        self._post_to_hipchat({
+        if _TEST_MODE:
+            logging.info("alertlib: would send to hipchat room %s: %s"
+                         % (room_name, message))
+        else:
+            self._post_to_hipchat({
                 'room_id': room_name,
                 'from': 'AlertiGator',
                 'message': message,
@@ -354,7 +372,13 @@ class Alert(object):
         cc = _normalize(cc)
         bcc = _normalize(bcc)
 
-        self._send_to_email(email_addresses, cc, bcc)
+        if _TEST_MODE:
+            logging.info("alertlib: would send email to %s (CC %s BCC %s): "
+                         "(subject %s) %s"
+                         % (email_addresses, cc, bcc,
+                            self._get_summary(), self.message))
+        else:
+            self._send_to_email(email_addresses, cc, bcc)
 
         return self
 
@@ -381,7 +405,14 @@ class Alert(object):
             return lst
 
         email_addresses = _service_name_to_email(pagerduty_servicenames)
-        self._send_to_email(email_addresses)
+
+        if _TEST_MODE:
+            logging.info("alertlib: would send pagerduty email to %s "
+                         "(subject %s) %s"
+                         % (email_addresses,
+                            self._get_summary(), self.message))
+        else:
+            self._send_to_email(email_addresses)
 
         return self
 
@@ -403,11 +434,12 @@ class Alert(object):
         logging.log(self.severity, self.message)
 
         # Also send to syslog if we can.
-        try:
-            syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
-            syslog.syslog(syslog_priority, self.message)
-        except NameError:
-            pass
+        if not _TEST_MODE:
+            try:
+                syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
+                syslog.syslog(syslog_priority, self.message)
+            except NameError:
+                pass
 
         return self
 
@@ -423,12 +455,14 @@ class Alert(object):
         myapp.stats.num_failures.  When send_to_graphite() is called,
         we send the given value for that statistic to graphite.
         """
-        if not hostedgraphite_api_key:
+        if _TEST_MODE:
+            logging.info("alertlib: would send to grpahite: %s %s"
+                         % (statistic, value))
+        elif not hostedgraphite_api_key:
             logging.warning("Not sending to graphite; no API key found: %s %s"
                             % (statistic, value))
-            return
-
-        _graphite_socket(graphite_host).send('%s.%s %s' % (
-                hostedgraphite_api_key, statistic, value))
+        else:
+            _graphite_socket(graphite_host).send('%s.%s %s' % (
+                    hostedgraphite_api_key, statistic, value))
 
         return self

@@ -93,6 +93,10 @@ def setup_parser():
                         default=alertlib.Alert.DEFAULT_GRAPHITE_HOST,
                         help=('host:port to send graphite data to '
                               '(default %(default)s)'))
+
+    parser.add_argument('-n', '--dry-run', action='store_true',
+                         help=("Just log what we would do, but don't do it"))
+
     return parser
 
 
@@ -123,6 +127,10 @@ def main():
     if sys.stdin.isatty():
         print >>sys.stderr, '>> Enter the message to alert, then hit control-D'
     message = sys.stdin.read().strip()
+
+    if args.dry_run:
+        alertlib.enter_test_mode()
+        logging.getLogger().setLevel(logging.INFO)
 
     alert(message, args)
 

@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 import alert
+import alertlib
 
 
 def setup_parser():
@@ -106,6 +107,10 @@ def run_with_timeout(timeout, args, kill_signal, kill_after=None,
 def main():
     parser = setup_parser()
     args = parser.parse_args()
+    if args.dry_run:
+        logging.getLogger().setLevel(logging.INFO)
+        alertlib.enter_test_mode()
+
     rc = run_with_timeout(args.duration, [args.command] + args.arg,
                           args.signal, args.kill_after, args.cwd)
     if rc == 127:

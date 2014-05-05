@@ -49,6 +49,7 @@ class TestBase(unittest.TestCase):
         self.sent_to_hipchat = []
         self.sent_to_google_mail = []
         self.sent_to_sendmail = []
+        self.sent_to_info_log = []
         self.sent_to_syslog = []
         self.sent_to_graphite = []
 
@@ -77,6 +78,9 @@ class TestBase(unittest.TestCase):
             lambda **kwargs: self.sent_to_google_mail.append(kwargs))
 
         alertlib.smtplib.SMTP = FakeSMTP
+
+        alertlib.logging.info = (
+            lambda *args: self.sent_to_info_log.append(args))
 
         alertlib.syslog.syslog = (
             lambda prio, msg: self.sent_to_syslog.append((prio, msg)))
@@ -644,6 +648,38 @@ class IntegrationTest(TestBase):
 
         self.assertEqual(['<hostedgraphite API key>.stats.alerted 1'],
                          self.sent_to_graphite)
+
+    def test_test_mode(self):
+        alertlib.enter_test_mode()
+        try:
+            alertlib.Alert('test message') \
+                .send_to_hipchat('1s and 0s') \
+                .send_to_email('ka-admin') \
+                .send_to_pagerduty('oncall') \
+                .send_to_logs() \
+                .send_to_graphite('stats.alerted')
+        finally:
+            alertlib.exit_test_mode()
+
+        # Should only log, not send to anything
+        self.assertEqual([], self.sent_to_hipchat)
+        self.assertEqual([], self.sent_to_google_mail)
+        self.assertEqual([], self.sent_to_sendmail)
+        self.assertEqual([], self.sent_to_syslog)
+        self.assertEqual([], self.sent_to_graphite)
+
+        self.assertEqual(
+            [('alertlib: would send to hipchat room 1s and 0s: '
+              'test message',),
+             ("alertlib: would send email to "
+              "['ka-admin@khanacademy.org'] "
+              "(CC None BCC None): (subject test message) test message",),
+             ("alertlib: would send pagerduty email to "
+              "['oncall@khan-academy.pagerduty.com'] "
+              "(subject test message) test message",),
+             ('alertlib: would send to grpahite: stats.alerted 1',)
+             ],
+            self.sent_to_info_log)
 
     def test_gae_sandbox(self):
         # Stub out imports just like appengine would.
