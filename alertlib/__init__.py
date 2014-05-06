@@ -238,13 +238,17 @@ class Alert(object):
             notify = (self.severity == logging.CRITICAL)
 
         if self.summary:
-            self._post_to_hipchat({
-                'room_id': room_name,
-                'from': 'AlertiGator',
-                'message': self.summary,
-                'message_format': 'text',
-                'notify': 0,
-                'color': color})
+            if _TEST_MODE:
+                logging.info("alertlib: would send to hipchat room %s: %s"
+                             % (room_name, self.summary))
+            else:
+                self._post_to_hipchat({
+                    'room_id': room_name,
+                    'from': 'AlertiGator',
+                    'message': self.summary,
+                    'message_format': 'text',
+                    'notify': 0,
+                    'color': color})
 
         # hipchat has a 10,000 char limit on messages, we leave some leeway
         message = self.message[:9000]
