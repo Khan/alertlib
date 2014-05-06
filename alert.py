@@ -82,6 +82,9 @@ def setup_parser():
     parser.add_argument('--cc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
+    parser.add_argument('--sender-suffix', default=None,
+                        help=('This adds "foo" to the sender address, which '
+                              'is alertlib <no-reply+foo@khanacademy.org>.'))
     parser.add_argument('--bcc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
@@ -107,7 +110,7 @@ def alert(message, args):
         a.send_to_hipchat(room, args.color, args.notify)
 
     if args.mail:
-        a.send_to_email(args.mail, args.cc, args.bcc)
+        a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
 
     for service in args.pagerduty:
         a.send_to_pagerduty(service)

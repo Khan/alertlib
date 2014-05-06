@@ -265,10 +265,18 @@ class Alert(object):
 
     # ----------------- EMAIL --------------------------------------------
 
-    def _send_to_gae_email(self, message, email_addresses, cc=None, bcc=None):
+    def _get_sender(self, sender):
+        sender_addr = 'no-reply'
+        if sender:
+            # Replace everything that's not alphanumeric with '-'
+            sender_addr += '+' + re.sub(r'\W', '-', sender)
+        return 'alertlib <%s@khanacademy.org>' % sender_addr
+
+    def _send_to_gae_email(self, message, email_addresses, cc=None, bcc=None,
+                           sender=None):
         gae_mail_args = {
             'subject': self._get_summary(),
-            'sender': 'alertlib <no-reply@khanacademy.org>',
+            'sender': self._get_sender(sender),
             'to': email_addresses,      # "x@y" or "Full Name <x@y>"
             }
         if cc:
@@ -284,11 +292,12 @@ class Alert(object):
             gae_mail_args['body'] = message
         google_mail.send_mail(**gae_mail_args)
 
-    def _send_to_sendmail(self, message, email_addresses, cc=None, bcc=None):
+    def _send_to_sendmail(self, message, email_addresses, cc=None, bcc=None,
+                          sender=None):
         msg = email.mime.text.MIMEText(message,
                                        'html' if self.html else 'text')
         msg['Subject'] = self._get_summary()
-        msg['From'] = 'alertlib <no-reply@khanacademy.org>'
+        msg['From'] = self._get_sender(sender)
         msg['To'] = ', '.join(email_addresses)
         # We could pass the priority in the 'Importance' header, but
         # since nobody pays attention to that (and we can't even set
@@ -312,28 +321,28 @@ class Alert(object):
         s.sendmail('no-reply@khanacademy.org', to_emails, msg.as_string())
         s.quit()
 
-    def _send_to_email(self, email_addresses, cc=None, bcc=None):
+    def _send_to_email(self, email_addresses, cc=None, bcc=None, sender=None):
         """An internal routine; email_addresses must be full addresses."""
         # Make sure the email text ends in a single newline.
         message = self.message.rstrip('\n') + '\n'
 
         # Try sending to appengine first.
         try:
-            self._send_to_gae_email(message, email_addresses, cc, bcc)
+            self._send_to_gae_email(message, email_addresses, cc, bcc, sender)
             return
         except (NameError, AssertionError), why:
             pass
 
         # Try using local smtp.
         try:
-            self._send_to_sendmail(message, email_addresses, cc, bcc)
+            self._send_to_sendmail(message, email_addresses, cc, bcc, sender)
             return
         except (NameError, smtplib.SMTPException), why:
             pass
 
         logging.error('Failed sending email: %s' % why)
 
-    def send_to_email(self, email_usernames, cc=None, bcc=None):
+    def send_to_email(self, email_usernames, cc=None, bcc=None, sender=None):
         """Send the message to a khan academy email account.
 
         (We *could* send emails outside ka.org, but right now the API
@@ -354,6 +363,8 @@ class Alert(object):
                 not need to specify 'khanacademy.org'.
             cc / bcc: who to cc/bcc on the email.  Takes usernames as
                 a string or list, same as email_usernames.
+            sender: an optional addition to the sender address, which if
+                provided, becomes 'alertlib <no-reply+sender@khanacademy.org>'.
         """
         def _normalize(lst):
             if lst is None:
@@ -378,7 +389,7 @@ class Alert(object):
                          % (email_addresses, cc, bcc,
                             self._get_summary(), self.message))
         else:
-            self._send_to_email(email_addresses, cc, bcc)
+            self._send_to_email(email_addresses, cc, bcc, sender)
 
         return self
 

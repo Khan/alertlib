@@ -315,6 +315,38 @@ class EmailTest(TestBase):
                           ],
                          self.sent_to_sendmail)
 
+    def test_sender(self):
+        sender = 'foo$123*bar'
+        clean_sender = 'foo-123-bar'
+        alertlib.Alert('test message').send_to_email(
+            ['ka-admin', 'ka-blackhole'], sender=sender)
+        with disable_google_mail():
+            alertlib.Alert('test message').send_to_email(
+                ['ka-admin', 'ka-blackhole'], sender=sender)
+
+        self.assertEqual([{'body': 'test message\n',
+                           'sender': ('alertlib <no-reply+%s@khanacademy.org>'
+                                      % clean_sender),
+                           'subject': 'test message',
+                           'to': ['ka-admin@khanacademy.org',
+                                  'ka-blackhole@khanacademy.org']}],
+                         self.sent_to_google_mail)
+
+        self.assertEqual([('no-reply@khanacademy.org',
+                           ['ka-admin@khanacademy.org',
+                            'ka-blackhole@khanacademy.org'],
+                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'MIME-Version: 1.0\n'
+                           'Content-Transfer-Encoding: 7bit\n'
+                           'Subject: test message\n'
+                           'From: alertlib <no-reply+%s@khanacademy.org>\n'
+                           'To: ka-admin@khanacademy.org,'
+                           ' ka-blackhole@khanacademy.org\n\n'
+                           'test message\n' % clean_sender
+                           ),
+                          ],
+                         self.sent_to_sendmail)
+
     def test_error_severity(self):
         alertlib.Alert('test message', severity=logging.ERROR).send_to_email(
             'ka-admin')
