@@ -103,7 +103,8 @@ class TestAlerts(unittest.TestCase):
             [('alertlib: would send to hipchat room testroom: '
               'TIMEOUT running true',),
              ("alertlib: would send email to "
-              "['tim@khanacademy.org'] (CC [] BCC []): "
+              "['tim@khanacademy.org'] "
+              "(from alertlib <no-reply@khanacademy.org> CC [] BCC []): "
               "(subject ERROR: TIMEOUT running true) TIMEOUT running true",),
              ("alertlib: would send pagerduty email to "
               "['time@khan-academy.pagerduty.com'] "
@@ -120,7 +121,8 @@ class TestAlerts(unittest.TestCase):
             [('alertlib: would send to hipchat room testroom: '
               'TIMEOUT running true',),
              ("alertlib: would send email to "
-              "['tim@khanacademy.org'] (CC [] BCC []): "
+              "['tim@khanacademy.org'] "
+              "(from alertlib <no-reply@khanacademy.org> CC [] BCC []): "
               "(subject TIMEOUT running true) TIMEOUT running true",),
              ("alertlib: would send pagerduty email to "
               "['time@khan-academy.pagerduty.com'] "
@@ -143,7 +145,8 @@ class TestAlerts(unittest.TestCase):
               'TIMEOUT running true',),
              ("alertlib: would send email to "
               "['tim@khanacademy.org', 'tam@khanacademy.org'] "
-              "(CC ['you@khanacademy.org', 'would-like@khanacademy.org'] "
+              "(from alertlib <no-reply@khanacademy.org> "
+              "CC ['you@khanacademy.org', 'would-like@khanacademy.org'] "
               "BCC ['to@khanacademy.org', 'know@khanacademy.org']): "
               "(subject ERROR: TIMEOUT running true) TIMEOUT running true",),
              ("alertlib: would send pagerduty email to "
@@ -153,6 +156,21 @@ class TestAlerts(unittest.TestCase):
              ('alertlib: would send to graphite: stats.alert 1',),
              ('alertlib: would send to graphite: stats.bad 1',),
              ('alertlib: would send to graphite: stats.reallybad 1',),
+             ],
+            self.sent_to_info_log)
+
+    def test_sender_suffix(self):
+        timeout.main('-n --summary timeout-test --sender-suffix=filter '
+                     '--mail=tim --pagerduty=time! '
+                     '0 true'.split())
+        self.assertEqual(
+            [("alertlib: would send email to ['tim@khanacademy.org'] "
+              "(from alertlib <no-reply+filter@khanacademy.org> "
+              "CC [] BCC []): "
+              "(subject timeout-test) TIMEOUT running true",),
+             ("alertlib: would send pagerduty email to "
+              "['time@khan-academy.pagerduty.com'] "
+              "(subject timeout-test) TIMEOUT running true",),
              ],
             self.sent_to_info_log)
 
@@ -166,7 +184,8 @@ class TestAlerts(unittest.TestCase):
              ('alertlib: would send to hipchat room testroom: '
               'TIMEOUT running true',),
              ("alertlib: would send email to "
-              "['tim@khanacademy.org'] (CC [] BCC []): "
+              "['tim@khanacademy.org'] "
+              "(from alertlib <no-reply@khanacademy.org> CC [] BCC []): "
               "(subject timeout-test) TIMEOUT running true",),
              ("alertlib: would send pagerduty email to "
               "['time@khan-academy.pagerduty.com'] "

@@ -388,10 +388,10 @@ class Alert(object):
         bcc = _normalize(bcc)
 
         if _TEST_MODE:
-            logging.info("alertlib: would send email to %s (CC %s BCC %s): "
-                         "(subject %s) %s"
-                         % (email_addresses, cc, bcc,
-                            self._get_summary(), self.message))
+            logging.info("alertlib: would send email to %s "
+                         "(from %s CC %s BCC %s): (subject %s) %s"
+                         % (email_addresses, self._get_sender(sender),
+                            cc, bcc, self._get_summary(), self.message))
         else:
             self._send_to_email(email_addresses, cc, bcc, sender)
 

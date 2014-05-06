@@ -713,7 +713,8 @@ class IntegrationTest(TestBase):
               'test message',),
              ("alertlib: would send email to "
               "['ka-admin@khanacademy.org'] "
-              "(CC None BCC None): (subject test message) test message",),
+              "(from alertlib <no-reply@khanacademy.org> CC None BCC None): "
+              "(subject test message) test message",),
              ("alertlib: would send pagerduty email to "
               "['oncall@khan-academy.pagerduty.com'] "
               "(subject test message) test message",),
