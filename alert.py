@@ -88,7 +88,7 @@ def setup_parser():
     parser.add_argument('--bcc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
-    parser.add_argument('--graphite_value', default=1, type=int,
+    parser.add_argument('--graphite_value', default=1, type=float,
                         help=('Value to send to graphite for each of the '
                               'graphite statistics specified '
                               '(default %(default)s)'))
@@ -112,8 +112,8 @@ def alert(message, args):
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
 
-    for service in args.pagerduty:
-        a.send_to_pagerduty(service)
+    if args.pagerduty:
+        a.send_to_pagerduty(args.pagerduty)
 
     if args.logs:
         a.send_to_logs()
@@ -123,9 +123,9 @@ def alert(message, args):
                            args.graphite_host)
 
 
-def main():
+def main(argv):
     parser = setup_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if sys.stdin.isatty():
         print >>sys.stderr, '>> Enter the message to alert, then hit control-D'
@@ -139,4 +139,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])

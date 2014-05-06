@@ -22,7 +22,7 @@ fake_google_mail = types.ModuleType('google_mail')
 fake_google_mail.__name__ = 'google_mail'
 sys.modules['google_mail'] = fake_google_mail
 
-# This makes it so we can find i18nize_templates when running from repo-root.
+# This makes it so we can find alertlib when running from repo-root.
 sys.path.insert(1, '.')
 import alertlib
 
@@ -709,7 +709,7 @@ class IntegrationTest(TestBase):
              ("alertlib: would send pagerduty email to "
               "['oncall@khan-academy.pagerduty.com'] "
               "(subject test message) test message",),
-             ('alertlib: would send to grpahite: stats.alerted 1',)
+             ('alertlib: would send to graphite: stats.alerted 1',)
              ],
             self.sent_to_info_log)
 

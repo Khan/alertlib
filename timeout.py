@@ -2,13 +2,15 @@
 
 """Run the specified command, and alert if it doesn't finish in time.
 
-We return the return-code of the specified command, or 127 if the
-command did not finish in time.
+We return the return-code of the specified command, or 124 if the
+command did not finish in time.  (124 is taken to be consistent with
+timeout(1): http://linux.die.net/man/1/timeout)
 
 The basic recipe is taken from
    http://stackoverflow.com/questions/1191374/subprocess-with-timeout
 """
 
+import argparse
 import logging
 import os
 import signal
@@ -42,7 +44,7 @@ def setup_parser():
                         help=('How many seconds to let the command run.'))
     parser.add_argument('command',
                         help=('The command to run'))
-    parser.add_argument('arg', nargs='*',
+    parser.add_argument('arg', nargs=argparse.REMAINDER,
                         help=('Arguments to the command'))
 
     return parser
@@ -66,6 +68,9 @@ def _run_with_timeout(p, timeout, kill_signal, kill_tree=True):
     """Return False if we timed out, True else."""
     def alarm_handler(signum, frame):
         raise _Alarm
+
+    if timeout == 0:       # this is mostly useful for testing
+        return False
 
     signal.signal(signal.SIGALRM, alarm_handler)
     signal.alarm(timeout)
@@ -92,7 +97,7 @@ def run_with_timeout(timeout, args, kill_signal, kill_after=None,
                      cwd=None, kill_tree=True):
     """Run a command with a timeout after which it will be forcibly killed.
 
-    If we forcibly kill, we return rc 127, otherwise we return whatever
+    If we forcibly kill, we return rc 124, otherwise we return whatever
     the command would.
     """
     p = subprocess.Popen(args, shell=False, cwd=cwd)
@@ -100,23 +105,23 @@ def run_with_timeout(timeout, args, kill_signal, kill_after=None,
     finished = _run_with_timeout(p, timeout, kill_signal, kill_tree)
     if not finished:
         if kill_after:
-            _run_with_timeout(p, kill_after, signal.KILL, kill_tree)
-    return p.returncode if finished else 127
+            _run_with_timeout(p, kill_after, signal.SIGKILL, kill_tree)
+    return p.returncode if finished else 124
 
 
-def main():
+def main(argv):
     parser = setup_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.dry_run:
         logging.getLogger().setLevel(logging.INFO)
         alertlib.enter_test_mode()
 
     rc = run_with_timeout(args.duration, [args.command] + args.arg,
                           args.signal, args.kill_after, args.cwd)
-    if rc == 127:
+    if rc == 124:
         alert.alert('TIMEOUT running %s' % args.command, args)
     return rc
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

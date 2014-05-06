@@ -243,12 +243,12 @@ class Alert(object):
                              % (room_name, self.summary))
             else:
                 self._post_to_hipchat({
-                    'room_id': room_name,
-                    'from': 'AlertiGator',
-                    'message': self.summary,
-                    'message_format': 'text',
-                    'notify': 0,
-                    'color': color})
+                        'room_id': room_name,
+                        'from': 'AlertiGator',
+                        'message': self.summary,
+                        'message_format': 'text',
+                        'notify': 0,
+                        'color': color})
 
         # hipchat has a 10,000 char limit on messages, we leave some leeway
         message = self.message[:9000]
@@ -258,12 +258,12 @@ class Alert(object):
                          % (room_name, message))
         else:
             self._post_to_hipchat({
-                'room_id': room_name,
-                'from': 'AlertiGator',
-                'message': message,
-                'message_format': 'html' if self.html else 'text',
-                'notify': int(notify),
-                'color': color})
+                    'room_id': room_name,
+                    'from': 'AlertiGator',
+                    'message': message,
+                    'message_format': 'html' if self.html else 'text',
+                    'notify': int(notify),
+                    'color': color})
 
         return self      # so we can chain the method calls
 
@@ -470,8 +470,12 @@ class Alert(object):
         myapp.stats.num_failures.  When send_to_graphite() is called,
         we send the given value for that statistic to graphite.
         """
+        # If the value is 12.0, send it as 12, not 12.0
+        if int(value) == value:
+            value = int(value)
+
         if _TEST_MODE:
-            logging.info("alertlib: would send to grpahite: %s %s"
+            logging.info("alertlib: would send to graphite: %s %s"
                          % (statistic, value))
         elif not hostedgraphite_api_key:
             logging.warning("Not sending to graphite; no API key found: %s %s"
