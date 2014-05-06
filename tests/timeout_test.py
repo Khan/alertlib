@@ -81,14 +81,19 @@ class TestAlerts(unittest.TestCase):
         # it would do without doing it.  Make sure we can see those
         # logs.
         self.sent_to_info_log = []
-        alertlib.logging.info = (
-            lambda *args: self.sent_to_info_log.append(args))
-        alertlib.logging.log = (
-            lambda severity, message: (
-                self.sent_to_info_log.append((message,))
-                if severity == logging.INFO else None))
+        self.mock(alertlib.logging, 'info',
+                  lambda *args: self.sent_to_info_log.append(args))
+        self.mock(alertlib.logging, 'log',
+                  lambda severity, message: (
+                      self.sent_to_info_log.append((message,))
+                      if severity == logging.INFO else None))
 
         self.maxDiff = None
+
+    def mock(self, container, var_str, new_value):
+        old_value = getattr(container, var_str)
+        self.addCleanup(lambda: setattr(container, var_str, old_value))
+        setattr(container, var_str, new_value)
 
     def test_alerts_on_timeout(self):
         timeout.main('-n --hipchat=testroom --mail=tim '

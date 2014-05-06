@@ -71,22 +71,30 @@ class TestBase(unittest.TestCase):
 
         # We need to mock out a bunch of stuff so we don't actually
         # talk to the real world.
-        alertlib.Alert._post_to_hipchat = (
-            lambda s, post_dict: self.sent_to_hipchat.append(post_dict))
+        self.mock(alertlib.Alert, '_post_to_hipchat',
+                  lambda s, post_dict: self.sent_to_hipchat.append(post_dict))
 
-        alertlib.google_mail.send_mail = (
-            lambda **kwargs: self.sent_to_google_mail.append(kwargs))
+        self.mock(alertlib.google_mail, 'send_mail',
+                  lambda **kwargs: self.sent_to_google_mail.append(kwargs))
 
-        alertlib.smtplib.SMTP = FakeSMTP
+        self.mock(alertlib.smtplib, 'SMTP', FakeSMTP)
 
-        alertlib.logging.info = (
-            lambda *args: self.sent_to_info_log.append(args))
+        self.mock(alertlib.logging, 'info',
+                  lambda *args: self.sent_to_info_log.append(args))
 
-        alertlib.syslog.syslog = (
-            lambda prio, msg: self.sent_to_syslog.append((prio, msg)))
+        self.mock(alertlib.syslog, 'syslog',
+                  lambda prio, msg: self.sent_to_syslog.append((prio, msg)))
 
-        alertlib._graphite_socket = (
-            lambda hostname: FakeGraphiteSocket)
+        self.mock(alertlib, '_graphite_socket',
+                  lambda hostname: FakeGraphiteSocket)
+
+    def mock(self, container, var_str, new_value):
+        if hasattr(container, var_str):
+            old_value = getattr(container, var_str)
+            self.addCleanup(lambda: setattr(container, var_str, old_value))
+        else:
+            self.addCleanup(lambda: delattr(container, var_str))
+        setattr(container, var_str, new_value)
 
 
 class HipchatTest(TestBase):
