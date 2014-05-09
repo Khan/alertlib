@@ -453,7 +453,7 @@ class Alert(object):
             try:
                 syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
                 syslog.syslog(syslog_priority, self.message)
-            except NameError:
+            except KeyError:
                 pass
 
         return self
