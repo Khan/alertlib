@@ -213,11 +213,14 @@ class Alert(object):
                             % post_dict)
             return
 
-        r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message'
-                            '?auth_token=%s' % hipchat_token,
-                            urllib.urlencode(post_dict))
-        if r.getcode() != 200:
-            logging.error('Failed sending to hipchat: %s' % r.read())
+        try:
+            r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message'
+                                '?auth_token=%s' % hipchat_token,
+                                urllib.urlencode(post_dict))
+            if r.getcode() != 200:
+                raise ValueError(r.read())
+        except Exception, why:
+            logging.error('Failed sending to hipchat: %s' % why)
 
     def send_to_hipchat(self, room_name, color=None,
                         notify=None):
@@ -453,7 +456,7 @@ class Alert(object):
             try:
                 syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
                 syslog.syslog(syslog_priority, self.message)
-            except KeyError:
+            except (NameError, KeyError):
                 pass
 
         return self
