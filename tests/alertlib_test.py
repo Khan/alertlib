@@ -50,6 +50,7 @@ class TestBase(unittest.TestCase):
         self.sent_to_google_mail = []
         self.sent_to_sendmail = []
         self.sent_to_info_log = []
+        self.sent_to_error_log = []
         self.sent_to_syslog = []
         self.sent_to_graphite = []
 
@@ -71,7 +72,7 @@ class TestBase(unittest.TestCase):
 
         # We need to mock out a bunch of stuff so we don't actually
         # talk to the real world.
-        self.mock(alertlib.Alert, '_post_to_hipchat',
+        self.mock(alertlib.Alert, '_make_hipchat_api_call',
                   lambda s, post_dict: self.sent_to_hipchat.append(post_dict))
 
         self.mock(alertlib.google_mail, 'send_mail',
@@ -82,11 +83,18 @@ class TestBase(unittest.TestCase):
         self.mock(alertlib.logging, 'info',
                   lambda *args: self.sent_to_info_log.append(args))
 
+        self.mock(alertlib.logging, 'error',
+                  lambda *args: self.sent_to_error_log.append(args))
+
         self.mock(alertlib.syslog, 'syslog',
                   lambda prio, msg: self.sent_to_syslog.append((prio, msg)))
 
         self.mock(alertlib, '_graphite_socket',
                   lambda hostname: FakeGraphiteSocket)
+
+    def tearDown(self):
+        # None of the tests should have caused any errors.
+        self.assertEqual([], self.sent_to_error_log)
 
     def mock(self, container, var_str, new_value):
         if hasattr(container, var_str):
@@ -101,7 +109,8 @@ class HipchatTest(TestBase):
     def test_options(self):
         alertlib.Alert('test message') \
             .send_to_hipchat('1s and 0s', color='gray', notify=True)
-        self.assertEqual([{'color': 'gray',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'gray',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',
@@ -112,7 +121,8 @@ class HipchatTest(TestBase):
     def test_custom_sender(self):
         alertlib.Alert('test message') \
             .send_to_hipchat('1s and 0s', sender='Notification Newt')
-        self.assertEqual([{'color': 'purple',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
                            'from': 'Notification Newt',
                            'message': 'test message',
                            'message_format': 'text',
@@ -123,7 +133,8 @@ class HipchatTest(TestBase):
     def test_debug_severity(self):
         alertlib.Alert('test message', severity=logging.DEBUG) \
             .send_to_hipchat('1s and 0s')
-        self.assertEqual([{'color': 'gray',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'gray',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',
@@ -134,7 +145,8 @@ class HipchatTest(TestBase):
     def test_error_severity(self):
         alertlib.Alert('test message', severity=logging.ERROR) \
             .send_to_hipchat('1s and 0s')
-        self.assertEqual([{'color': 'red',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'red',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',
@@ -145,7 +157,8 @@ class HipchatTest(TestBase):
     def test_critical_severity(self):
         alertlib.Alert('test message', severity=logging.CRITICAL) \
             .send_to_hipchat('1s and 0s')
-        self.assertEqual([{'color': 'red',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'red',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',
@@ -157,15 +170,28 @@ class HipchatTest(TestBase):
         alertlib.Alert('a' * 30000).send_to_hipchat('1s and 0s')
         self.assertLess(len(self.sent_to_hipchat[0]['message']), 10000)
 
+    def test_utf8(self):
+        alertlib.Alert(u'\xf7').send_to_hipchat(u'1s and \xf7s')
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
+                           'from': 'AlertiGator',
+                           'message': '\xc3\xb7',
+                           'message_format': 'text',
+                           'notify': 0,
+                           'room_id': '1s and \xc3\xb7s'}],
+                         self.sent_to_hipchat)
+
     def test_summary(self):
         alertlib.Alert('test message', summary='test').send_to_hipchat('room')
-        self.assertEqual([{'color': 'purple',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
                            'from': 'AlertiGator',
                            'message': 'test',
                            'message_format': 'text',
                            'notify': 0,
                            'room_id': 'room'},
-                          {'color': 'purple',
+                          {'auth_token': '<hipchat token>',
+                           'color': 'purple',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',
@@ -175,7 +201,8 @@ class HipchatTest(TestBase):
 
     def test_html(self):
         alertlib.Alert('<b>test message</b>', html=True).send_to_hipchat('rm')
-        self.assertEqual([{'color': 'purple',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
                            'from': 'AlertiGator',
                            'message': '<b>test message</b>',
                            'message_format': 'html',
@@ -667,13 +694,15 @@ class IntegrationTest(TestBase):
             .send_to_graphite('stats.alerted') \
             .send_to_hipchat('test')
 
-        self.assertEqual([{'color': 'purple',
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',
                            'notify': 0,
                            'room_id': '1s and 0s'},
-                          {'color': 'purple',
+                          {'auth_token': '<hipchat token>',
+                           'color': 'purple',
                            'from': 'AlertiGator',
                            'message': 'test message',
                            'message_format': 'text',

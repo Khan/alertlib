@@ -207,21 +207,30 @@ class Alert(object):
         logging.CRITICAL: "red",
         }
 
+    def _make_hipchat_api_call(self, post_dict_with_secret_token):
+        # This is a separate function just to make it easy to mock for tests.
+        r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message',
+                            urllib.urlencode(post_dict_with_secret_token))
+        if r.getcode() != 200:
+            raise ValueError(r.read())
+
     def _post_to_hipchat(self, post_dict):
         if not hipchat_token:
             logging.warning("Not sending this to hipchat (no token found): %s"
                             % post_dict)
             return
 
-        # Don't put the token in the URL to stop key leakage via error messages
+        # We need to send the token to the API!
         post_dict_with_secret_token = post_dict.copy()
         post_dict_with_secret_token['auth_token'] = hipchat_token
 
+        # urlencode requires that all fields be in utf-8.
+        for (k, v) in post_dict_with_secret_token.iteritems():
+            if isinstance(v, unicode):
+                post_dict_with_secret_token[k] = v.encode('utf-8')
+
         try:
-            r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message',
-                                urllib.urlencode(post_dict_with_secret_token))
-            if r.getcode() != 200:
-                raise ValueError(r.read())
+            self._make_hipchat_api_call(post_dict_with_secret_token)
         except Exception, why:
             logging.error('Failed sending %s to hipchat: %s'
                           % (post_dict, why))
