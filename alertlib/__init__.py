@@ -220,7 +220,8 @@ class Alert(object):
             if r.getcode() != 200:
                 raise ValueError(r.read())
         except Exception, why:
-            logging.error('Failed sending to hipchat: %s' % why)
+            logging.error('Failed sending %s to hipchat: %s'
+                          % (post_dict, why))
 
     def send_to_hipchat(self, room_name, color=None,
                         notify=None):
@@ -390,13 +391,16 @@ class Alert(object):
         cc = _normalize(cc)
         bcc = _normalize(bcc)
 
+        email_contents = ("email to %s (from %s CC %s BCC %s): (subject %s) %s"
+                          % (email_addresses, self._get_sender(sender),
+                             cc, bcc, self._get_summary(), self.message))
         if _TEST_MODE:
-            logging.info("alertlib: would send email to %s "
-                         "(from %s CC %s BCC %s): (subject %s) %s"
-                         % (email_addresses, self._get_sender(sender),
-                            cc, bcc, self._get_summary(), self.message))
+            logging.info("alertlib: would send %s" % email_contents)
         else:
-            self._send_to_email(email_addresses, cc, bcc, sender)
+            try:
+                self._send_to_email(email_addresses, cc, bcc, sender)
+            except Exception, why:
+                logging.error('Failed sending %s: %s' % (email_contents, why))
 
         return self
 
@@ -424,13 +428,16 @@ class Alert(object):
 
         email_addresses = _service_name_to_email(pagerduty_servicenames)
 
+        email_contents = ("pagerduty email to %s (subject %s) %s"
+                          % (email_addresses, self._get_summary(),
+                             self.message))
         if _TEST_MODE:
-            logging.info("alertlib: would send pagerduty email to %s "
-                         "(subject %s) %s"
-                         % (email_addresses,
-                            self._get_summary(), self.message))
+            logging.info("alertlib: would send %s" % email_contents)
         else:
-            self._send_to_email(email_addresses)
+            try:
+                self._send_to_email(email_addresses)
+            except Exception, why:
+                logging.error('Failed sending %s: %s' % (email_contents, why))
 
         return self
 
@@ -484,7 +491,10 @@ class Alert(object):
             logging.warning("Not sending to graphite; no API key found: %s %s"
                             % (statistic, value))
         else:
-            _graphite_socket(graphite_host).send('%s.%s %s' % (
-                    hostedgraphite_api_key, statistic, value))
+            try:
+                _graphite_socket(graphite_host).send('%s.%s %s' % (
+                        hostedgraphite_api_key, statistic, value))
+            except Exception, why:
+                logging.error('Failed sending to graphite: %s' % why)
 
         return self
