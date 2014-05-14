@@ -227,7 +227,7 @@ class Alert(object):
                           % (post_dict, why))
 
     def send_to_hipchat(self, room_name, color=None,
-                        notify=None):
+                        notify=None, sender='AlertiGator'):
         """
         Arguments:
             room_name: e.g. '1s and 0s'.
@@ -251,7 +251,7 @@ class Alert(object):
             else:
                 self._post_to_hipchat({
                         'room_id': room_name,
-                        'from': 'AlertiGator',
+                        'from': sender,
                         'message': self.summary,
                         'message_format': 'text',
                         'notify': 0,
@@ -266,7 +266,7 @@ class Alert(object):
         else:
             self._post_to_hipchat({
                     'room_id': room_name,
-                    'from': 'AlertiGator',
+                    'from': sender,
                     'message': message,
                     'message_format': 'html' if self.html else 'text',
                     'notify': int(notify),

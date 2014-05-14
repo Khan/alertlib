@@ -109,6 +109,17 @@ class HipchatTest(TestBase):
                            'room_id': '1s and 0s'}],
                          self.sent_to_hipchat)
 
+    def test_custom_sender(self):
+        alertlib.Alert('test message') \
+            .send_to_hipchat('1s and 0s', sender='Notification Newt')
+        self.assertEqual([{'color': 'purple',
+                           'from': 'Notification Newt',
+                           'message': 'test message',
+                           'message_format': 'text',
+                           'notify': 0,
+                           'room_id': '1s and 0s'}],
+                         self.sent_to_hipchat)
+
     def test_debug_severity(self):
         alertlib.Alert('test message', severity=logging.DEBUG) \
             .send_to_hipchat('1s and 0s')
