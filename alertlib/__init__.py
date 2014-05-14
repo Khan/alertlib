@@ -213,9 +213,12 @@ class Alert(object):
                             % post_dict)
             return
 
+        # Don't put the token in the URL to stop key leakage via error messages
+        post_dict = post_dict.copy()
+        post_dict['auth_token'] = hipchat_token
+
         try:
-            r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message'
-                                '?auth_token=%s' % hipchat_token,
+            r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message',
                                 urllib.urlencode(post_dict))
             if r.getcode() != 200:
                 raise ValueError(r.read())
