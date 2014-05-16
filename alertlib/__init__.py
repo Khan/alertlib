@@ -81,7 +81,7 @@ except ImportError:
 # If this fails, you don't have secrets.py set up as needed for this lib.
 try:
     import secrets
-    hipchat_token = secrets.hipchat_deploy_token
+    hipchat_token = secrets.hipchat_alertlib_token
     hostedgraphite_api_key = secrets.hostedgraphite_api_key
 except ImportError:
     hipchat_token = None
