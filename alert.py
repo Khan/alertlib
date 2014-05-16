@@ -72,6 +72,8 @@ def setup_parser():
                         action=_ParseSeverity,
                         help=('Severity of the message, which may affect '
                               'how we alert (default: %(default)s)'))
+    parser.add_argument('--html', action='store_true', default=False,
+                        help=('Indicate the input should be treated as html'))
     parser.add_argument('--color', default=None,
                         choices=['yellow', 'red', 'green', 'purple',
                                  'gray', 'random'],
@@ -104,7 +106,7 @@ def setup_parser():
 
 
 def alert(message, args):
-    a = alertlib.Alert(message, args.summary, args.severity, html=False)
+    a = alertlib.Alert(message, args.summary, args.severity, html=args.html)
 
     for room in args.hipchat:
         a.send_to_hipchat(room, args.color, args.notify)
