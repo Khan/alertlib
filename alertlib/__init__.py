@@ -315,7 +315,7 @@ class Alert(object):
     def _send_to_sendmail(self, message, email_addresses, cc=None, bcc=None,
                           sender=None):
         msg = email.mime.text.MIMEText(message,
-                                       'html' if self.html else 'text')
+                                       'html' if self.html else 'plain')
         msg['Subject'] = self._get_summary()
         msg['From'] = self._get_sender(sender)
         msg['To'] = ', '.join(email_addresses)
