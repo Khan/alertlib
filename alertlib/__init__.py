@@ -78,20 +78,18 @@ try:
 except ImportError:
     pass
 
-# KA-specific hack: ka_secrets is a superset of secrets.
 try:
-    import ka_secrets
-    hipchat_token = ka_secrets.hipchat_alertlib_token
-    hostedgraphite_api_key = ka_secrets.hostedgraphite_api_key
+    # KA-specific hack: ka_secrets is a superset of secrets.
+    try:
+        import ka_secrets as secrets
+    except ImportError:
+        import secrets
+    hipchat_token = secrets.hipchat_alertlib_token
+    hostedgraphite_api_key = secrets.hostedgraphite_api_key
 except ImportError:
     # If this fails, you don't have secrets.py set up as needed for this lib.
-    try:
-        import secrets
-        hipchat_token = secrets.hipchat_alertlib_token
-        hostedgraphite_api_key = secrets.hostedgraphite_api_key
-    except ImportError:
-        hipchat_token = None
-        hostedgraphite_api_key = None
+    hipchat_token = None
+    hostedgraphite_api_key = None
 
 
 # We want to convert a PagerDuty service name to an email address
