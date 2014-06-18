@@ -39,7 +39,8 @@ def setup_parser():
     parser.add_argument('--hipchat', default=[], action=_MakeList,
                         help=('Send to hipchat.  Argument is a comma-'
                               'separated list of room names. '
-                              'May specify --severity and/or --summary. '
+                              'May specify --severity and/or --summary '
+                              'and/or --hipchat-sender. '
                               'May specify --color and/or --notify '
                               '(if omitted we determine automatically).'))
     parser.add_argument('--mail', default=[], action=_MakeList,
@@ -74,6 +75,8 @@ def setup_parser():
                               'how we alert (default: %(default)s)'))
     parser.add_argument('--html', action='store_true', default=False,
                         help=('Indicate the input should be treated as html'))
+    parser.add_argument('--hipchat-sender', default='AlertiGator',
+                        help=('Who we say sent this hipchat message.'))
     parser.add_argument('--color', default=None,
                         choices=['yellow', 'red', 'green', 'purple',
                                  'gray', 'random'],
@@ -109,7 +112,7 @@ def alert(message, args):
     a = alertlib.Alert(message, args.summary, args.severity, html=args.html)
 
     for room in args.hipchat:
-        a.send_to_hipchat(room, args.color, args.notify)
+        a.send_to_hipchat(room, args.color, args.notify, args.hipchat_sender)
 
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
