@@ -273,6 +273,11 @@ class Alert(object):
         # hipchat has a 10,000 char limit on messages, we leave some leeway
         message = self.message[:9000]
 
+        # Note that we send the "summary" first, and then the "body".
+        # However, these back-to-back calls sometimes swap order en route
+        # to HipChat. So, let's sleep for 1 second to try and avoid that.
+        time.sleep(1)
+
         if _TEST_MODE:
             logging.info("alertlib: would send to hipchat room %s: %s"
                          % (room_name, message))
