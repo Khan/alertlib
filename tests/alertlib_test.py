@@ -13,7 +13,7 @@ import unittest
 # so the alertlib import can succeed
 fake_secrets = types.ModuleType('secrets')
 fake_secrets.__name__ = 'secrets'
-fake_secrets.hipchat_deploy_token = '<hipchat token>'
+fake_secrets.hipchat_alertlib_token = '<hipchat token>'
 fake_secrets.hostedgraphite_api_key = '<hostedgraphite API key>'
 sys.modules['secrets'] = fake_secrets
 
@@ -210,6 +210,37 @@ class HipchatTest(TestBase):
                            'room_id': 'rm'}],
                          self.sent_to_hipchat)
 
+    def test_nix_emoticons(self):
+        alertlib.Alert('(commit 345d8)', summary='(345d8)').send_to_hipchat(
+            'rm')
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
+                           'from': 'AlertiGator',
+                           'message': '(345d8\xe2\x80\x8b)',
+                           'message_format': 'text',
+                           'notify': 0,
+                           'room_id': 'rm'},
+                          {'auth_token': '<hipchat token>',
+                           'color': 'purple',
+                           'from': 'AlertiGator',
+                           'message': '(commit 345d8\xe2\x80\x8b)',
+                           'message_format': 'text',
+                           'notify': 0,
+                           'room_id': 'rm'}],
+                         self.sent_to_hipchat)
+
+    def test_no_message_munging_in_html(self):
+        """html mode doesn't display emoticons, so no need to munge them."""
+        alertlib.Alert('(commit 345d8)', html=True).send_to_hipchat('rm')
+        self.assertEqual([{'auth_token': '<hipchat token>',
+                           'color': 'purple',
+                           'from': 'AlertiGator',
+                           'message': '(commit 345d8)',
+                           'message_format': 'html',
+                           'notify': 0,
+                           'room_id': 'rm'}],
+                         self.sent_to_hipchat)
+
 
 class EmailTest(TestBase):
     def test_google_mail(self):
@@ -236,7 +267,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['oncall@khan-academy.pagerduty.com'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: test message\n'
@@ -246,7 +277,7 @@ class EmailTest(TestBase):
                            ),
                           ('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: test message\n'
@@ -275,7 +306,7 @@ class EmailTest(TestBase):
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org',
                             'ka-blackhole@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: test message\n'
@@ -301,7 +332,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: test message\n'
@@ -346,7 +377,7 @@ class EmailTest(TestBase):
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org',
                             'ka-blackhole@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: test message\n'
@@ -381,7 +412,7 @@ class EmailTest(TestBase):
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org',
                             'ka-blackhole@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: test message\n'
@@ -408,7 +439,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: ERROR: test message\n'
@@ -435,7 +466,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: a test...\n'
@@ -461,7 +492,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: this is...\n'
@@ -486,7 +517,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: This text is short\n'
@@ -515,7 +546,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: This text is long, it is very very '
@@ -544,7 +575,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: This text is long\n'
@@ -593,7 +624,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: \n'
@@ -617,7 +648,7 @@ class EmailTest(TestBase):
 
         self.assertEqual([('no-reply@khanacademy.org',
                            ['ka-admin@khanacademy.org'],
-                           'Content-Type: text/text; charset="us-ascii"\n'
+                           'Content-Type: text/plain; charset="us-ascii"\n'
                            'MIME-Version: 1.0\n'
                            'Content-Transfer-Encoding: 7bit\n'
                            'Subject: yo!\n'
@@ -627,6 +658,36 @@ class EmailTest(TestBase):
                            ),
                           ],
                          self.sent_to_sendmail)
+
+    def test_utf8(self):
+        with disable_google_mail():
+            alertlib.Alert(u'yo \xf7', summary=u'yep \xf7') \
+                .send_to_pagerduty('oncall') \
+                .send_to_email('ka-admin')
+
+        self.assertEqual([('no-reply@khanacademy.org',
+                           ['oncall@khan-academy.pagerduty.com'],
+                           'Content-Type: text/plain; charset="us-ascii"\n'
+                           'MIME-Version: 1.0\n'
+                           'Content-Transfer-Encoding: 8bit\n'
+                           'Subject: yep \xc3\xb7\n'
+                           'From: alertlib <no-reply@khanacademy.org>\n'
+                           'To: oncall@khan-academy.pagerduty.com\n\n'
+                           'yo \xc3\xb7\n'
+                           ),
+                          ('no-reply@khanacademy.org',
+                           ['ka-admin@khanacademy.org'],
+                           'Content-Type: text/plain; charset="us-ascii"\n'
+                           'MIME-Version: 1.0\n'
+                           'Content-Transfer-Encoding: 8bit\n'
+                           'Subject: yep \xc3\xb7\n'
+                           'From: alertlib <no-reply@khanacademy.org>\n'
+                           'To: ka-admin@khanacademy.org\n\n'
+                           'yo \xc3\xb7\n'
+                           ),
+                          ],
+                         self.sent_to_sendmail)
+        self.assertEqual([], self.sent_to_google_mail)
 
 
 class PagerDutyTest(TestBase):

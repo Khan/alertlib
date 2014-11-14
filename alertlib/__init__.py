@@ -144,11 +144,13 @@ class Alert(object):
                  html=False):
         """Arguments:
 
-        message: the message to alert
+        message: the message to alert.  The message may be either unicode
+            or utf-8 (but is stored internally as unicode).
         summary: a summary of the message, used as subject lines for email,
             for instance.  If omitted, the summary is taken as the first
             sentence of the message (but only when html==False), up to
-            60 characters.
+            60 characters.  The summary may be either unicode or utf-8
+            (but is stored internally as unicode.)
         severity: can be any logging level (ERROR, CRITICAL, INFO, etc).
             We do our best to encode the severity into each backend to
             the extent it's practical.
@@ -158,6 +160,11 @@ class Alert(object):
         self.summary = summary
         self.severity = severity
         self.html = html
+
+        if isinstance(self.message, str):
+            self.message = self.message.decode('utf-8')
+        if isinstance(self.summary, str):
+            self.summary = self.summary.decode('utf-8')
 
     def _get_summary(self):
         """Return the summary as given, or auto-extracted if necessary."""
@@ -257,6 +264,15 @@ class Alert(object):
         if notify is None:
             notify = (self.severity == logging.CRITICAL)
 
+        def _nix_bad_emoticons(text):
+            """Remove troublesome emoticons so, e.g., '(128)' renders properly.
+
+            By default (at least in 'text' mode), '8)' is replaced by
+            a sunglasses-head emoticon.  There is no way to send
+            sunglasses-head using alertlib.  This is a feature.
+            """
+            return text.replace(u'8)', u'8\u200b)')   # zero-width space
+
         if self.summary:
             if _TEST_MODE:
                 logging.info("alertlib: would send to hipchat room %s: %s"
@@ -265,7 +281,7 @@ class Alert(object):
                 self._post_to_hipchat({
                         'room_id': room_name,
                         'from': sender,
-                        'message': self.summary,
+                        'message': _nix_bad_emoticons(self.summary),
                         'message_format': 'text',
                         'notify': 0,
                         'color': color})
@@ -285,7 +301,8 @@ class Alert(object):
             self._post_to_hipchat({
                     'room_id': room_name,
                     'from': sender,
-                    'message': message,
+                    'message': (message if self.html else
+                                _nix_bad_emoticons(message)),
                     'message_format': 'html' if self.html else 'text',
                     'notify': int(notify),
                     'color': color})
@@ -323,9 +340,9 @@ class Alert(object):
 
     def _send_to_sendmail(self, message, email_addresses, cc=None, bcc=None,
                           sender=None):
-        msg = email.mime.text.MIMEText(message,
+        msg = email.mime.text.MIMEText(message.encode('utf-8'),
                                        'html' if self.html else 'plain')
-        msg['Subject'] = self._get_summary()
+        msg['Subject'] = self._get_summary().encode('utf-8')
         msg['From'] = self._get_sender(sender)
         msg['To'] = ', '.join(email_addresses)
         # We could pass the priority in the 'Importance' header, but
@@ -483,7 +500,7 @@ class Alert(object):
         if not _TEST_MODE:
             try:
                 syslog_priority = self._mapped_severity(self._LOG_TO_SYSLOG)
-                syslog.syslog(syslog_priority, self.message)
+                syslog.syslog(syslog_priority, self.message.encode('utf-8'))
             except (NameError, KeyError):
                 pass
 
