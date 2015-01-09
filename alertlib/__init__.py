@@ -141,7 +141,7 @@ def _graphite_socket(graphite_hostport):
 
 class Alert(object):
     def __init__(self, message, summary=None, severity=logging.INFO,
-                 html=False):
+                 html=False, rate_limit=None):
         """Arguments:
 
         message: the message to alert.  The message may be either unicode
@@ -155,16 +155,30 @@ class Alert(object):
             We do our best to encode the severity into each backend to
             the extent it's practical.
         html: True if the message should be treated as html, not text.
+        rate_limit: if not None, this Alert object will only emit
+            messages of a certain kind (hipchat, log, etc) once every
+            rate_limit seconds.
         """
         self.message = message
         self.summary = summary
         self.severity = severity
         self.html = html
+        self.rate_limit = rate_limit
+        self.last_sent = {}
 
         if isinstance(self.message, str):
             self.message = self.message.decode('utf-8')
         if isinstance(self.summary, str):
             self.summary = self.summary.decode('utf-8')
+
+    def _passed_rate_limit(self, service_name):
+        if not self.rate_limit:
+            return True
+        now = time.time()
+        if now - self.last_sent.get(service_name, -1000000) > self.rate_limit:
+            self.last_sent[service_name] = now
+            return True
+        return False
 
     def _get_summary(self):
         """Return the summary as given, or auto-extracted if necessary."""
@@ -258,6 +272,9 @@ class Alert(object):
                 If None, we pick the notification automatically based
                 on self.severity
         """
+        if not self._passed_rate_limit('hipchat'):
+            return self
+
         if color is None:
             color = self._mapped_severity(self._LOG_PRIORITY_TO_COLOR)
 
@@ -412,6 +429,9 @@ class Alert(object):
             sender: an optional addition to the sender address, which if
                 provided, becomes 'alertlib <no-reply+sender@khanacademy.org>'.
         """
+        if not self._passed_rate_limit('email'):
+            return self
+
         def _normalize(lst):
             if lst is None:
                 return None
@@ -452,6 +472,9 @@ class Alert(object):
                  strings, that are the names of PagerDuty services.
                  https://www.pagerduty.com/docs/guides/email-integration-guide/
         """
+        if not self._passed_rate_limit('pagerduty'):
+            return self
+
         def _service_name_to_email(lst):
             if isinstance(lst, basestring):
                 lst = [lst]
@@ -494,6 +517,9 @@ class Alert(object):
 
     def send_to_logs(self):
         """Send to logs: either GAE logs (for appengine) or syslog."""
+        if not self._passed_rate_limit('logs'):
+            return self
+
         logging.log(self.severity, self.message)
 
         # Also send to syslog if we can.
@@ -518,6 +544,9 @@ class Alert(object):
         myapp.stats.num_failures.  When send_to_graphite() is called,
         we send the given value for that statistic to graphite.
         """
+        if not self._passed_rate_limit('graphite'):
+            return self
+
         # If the value is 12.0, send it as 12, not 12.0
         if int(value) == value:
             value = int(value)

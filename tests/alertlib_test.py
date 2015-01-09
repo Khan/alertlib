@@ -6,6 +6,7 @@ import contextlib
 import logging
 import sys
 import syslog
+import time
 import types
 import unittest
 
@@ -742,6 +743,68 @@ class GraphiteTest(TestBase):
                          self.sent_to_graphite)
 
 
+class RateLimitingTest(TestBase):
+    @staticmethod
+    @contextlib.contextmanager
+    def _mock_time(new_time):
+        old_time = time.time
+        time.time = lambda: new_time
+        try:
+            yield
+        finally:
+            time.time = old_time
+
+    @staticmethod
+    def _set_time(new_time):
+        """Only call this within a mock-time context!"""
+        time.time = lambda: new_time
+
+    def test_no_rate_limiting(self):
+        alert = alertlib.Alert('test message')
+        for _ in xrange(100):
+            alert.send_to_graphite('stats.test_message', 4)
+        self.assertEqual(100, len(self.sent_to_graphite))
+
+    def test_burst(self):
+        alert = alertlib.Alert('test message', rate_limit=60)
+        for _ in xrange(100):
+            alert.send_to_graphite('stats.test_message', 4)
+        self.assertEqual(1, len(self.sent_to_graphite))
+
+    def test_different_alert_objects(self):
+        # Objects don't share state, so we won't rate limit here.
+        for _ in xrange(100):
+            alertlib.Alert('test message').send_to_graphite(
+                'stats.test_message', 4)
+        self.assertEqual(100, len(self.sent_to_graphite))
+
+    def test_limiting_with_longer_delay(self):
+        alert = alertlib.Alert('test message', rate_limit=60)
+        with self._mock_time(10):
+            alert.send_to_graphite('stats.test_message', 4)
+            self._set_time(20)
+            alert.send_to_graphite('stats.test_message', 4)
+        self.assertEqual(1, len(self.sent_to_graphite))
+
+    def test_no_limiting_with_longer_delay(self):
+        alert = alertlib.Alert('test message', rate_limit=60)
+        with self._mock_time(10):
+            alert.send_to_graphite('stats.test_message', 4)
+            self._set_time(100)
+            alert.send_to_graphite('stats.test_message', 4)
+        self.assertEqual(2, len(self.sent_to_graphite))
+
+    def test_limiting_on_different_services(self):
+        alert = alertlib.Alert('test message', rate_limit=60)
+        for _ in xrange(100):
+            alert.send_to_graphite('stats.test_message', 4) \
+                 .send_to_hipchat('1s and 0s')
+            alert.send_to_logs()
+        self.assertEqual(1, len(self.sent_to_graphite))
+        self.assertEqual(1, len(self.sent_to_hipchat))
+        self.assertEqual(1, len(self.sent_to_syslog))
+
+
 class IntegrationTest(TestBase):
     def test_chaining(self):
         # We send to hipchat a second time to make sure that
@@ -822,6 +885,25 @@ class IntegrationTest(TestBase):
              ('alertlib: would send to graphite: stats.alerted 1',)
              ],
             self.sent_to_info_log)
+
+    def test_rate_limiting(self):
+        """Make sure we put rate-limiting properly on each service."""
+        alert = alertlib.Alert('test message', rate_limit=60)
+        for _ in xrange(10):
+            alert.send_to_hipchat('1s and 0s') \
+                 .send_to_email('ka-admin') \
+                 .send_to_pagerduty('oncall') \
+                 .send_to_logs() \
+                 .send_to_graphite('stats.alerted')
+
+        # Should only log once
+        self.assertEqual(1, len(self.sent_to_hipchat))
+        # Well, google mail gets a second one due to pagerduty.
+        self.assertEqual(2, len(self.sent_to_google_mail))
+        # And sendmail gets none because we're using googlemail.
+        self.assertEqual(0, len(self.sent_to_sendmail))
+        self.assertEqual(1, len(self.sent_to_syslog))
+        self.assertEqual(1, len(self.sent_to_graphite))
 
     def test_gae_sandbox(self):
         # Stub out imports just like appengine would.
