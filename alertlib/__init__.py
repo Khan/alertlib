@@ -559,7 +559,7 @@ class Alert(object):
                             % (statistic, value))
         else:
             try:
-                _graphite_socket(graphite_host).send('%s.%s %s' % (
+                _graphite_socket(graphite_host).send('%s.%s %s\n' % (
                         hostedgraphite_api_key, statistic, value))
             except Exception, why:
                 logging.error('Failed sending to graphite: %s' % why)
