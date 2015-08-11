@@ -112,6 +112,7 @@ def enter_test_mode():
 
 
 def exit_test_mode():
+    """Exit test mode, and resume actually performing operations."""
     global _TEST_MODE
     _TEST_MODE = False
 
@@ -140,9 +141,14 @@ def _graphite_socket(graphite_hostport):
 
 
 class Alert(object):
+
+    """An alert message can be sent to multiple destinations."""
+
     def __init__(self, message, summary=None, severity=logging.INFO,
                  html=False, rate_limit=None):
-        """Arguments:
+        """Create a new Alert.
+
+        Arguments:
 
         message: the message to alert.  The message may be either unicode
             or utf-8 (but is stored internally as unicode).
@@ -262,7 +268,8 @@ class Alert(object):
 
     def send_to_hipchat(self, room_name, color=None,
                         notify=None, sender='AlertiGator'):
-        """
+        """Send the alert message to HipChat.
+
         Arguments:
             room_name: e.g. '1s and 0s'.
             color: background color, one of "yellow", "red", "green",
@@ -296,12 +303,12 @@ class Alert(object):
                              % (room_name, self.summary))
             else:
                 self._post_to_hipchat({
-                        'room_id': room_name,
-                        'from': sender,
-                        'message': _nix_bad_emoticons(self.summary),
-                        'message_format': 'text',
-                        'notify': 0,
-                        'color': color})
+                    'room_id': room_name,
+                    'from': sender,
+                    'message': _nix_bad_emoticons(self.summary),
+                    'message_format': 'text',
+                    'notify': 0,
+                    'color': color})
 
                 # Note that we send the "summary" first, and then the "body".
                 # However, these back-to-back calls sometimes swap order en
@@ -316,13 +323,13 @@ class Alert(object):
                          % (room_name, message))
         else:
             self._post_to_hipchat({
-                    'room_id': room_name,
-                    'from': sender,
-                    'message': (message if self.html else
-                                _nix_bad_emoticons(message)),
-                    'message_format': 'html' if self.html else 'text',
-                    'notify': int(notify),
-                    'color': color})
+                'room_id': room_name,
+                'from': sender,
+                'message': (message if self.html else
+                            _nix_bad_emoticons(message)),
+                'message_format': 'html' if self.html else 'text',
+                'notify': int(notify),
+                'color': color})
 
         return self      # so we can chain the method calls
 
@@ -560,7 +567,7 @@ class Alert(object):
         else:
             try:
                 _graphite_socket(graphite_host).send('%s.%s %s\n' % (
-                        hostedgraphite_api_key, statistic, value))
+                    hostedgraphite_api_key, statistic, value))
             except Exception, why:
                 logging.error('Failed sending to graphite: %s' % why)
 
