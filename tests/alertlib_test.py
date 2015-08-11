@@ -734,12 +734,12 @@ class GraphiteTest(TestBase):
     def test_value(self):
         alertlib.Alert('test message').send_to_graphite(
             'stats.test_message', 4)
-        self.assertEqual(['<hostedgraphite API key>.stats.test_message 4'],
+        self.assertEqual(['<hostedgraphite API key>.stats.test_message 4\n'],
                          self.sent_to_graphite)
 
     def test_default_value(self):
         alertlib.Alert('test message').send_to_graphite('stats.test_message')
-        self.assertEqual(['<hostedgraphite API key>.stats.test_message 1'],
+        self.assertEqual(['<hostedgraphite API key>.stats.test_message 1\n'],
                          self.sent_to_graphite)
 
 
@@ -850,7 +850,7 @@ class IntegrationTest(TestBase):
         self.assertEqual([(6, 'test message')],
                          self.sent_to_syslog)
 
-        self.assertEqual(['<hostedgraphite API key>.stats.alerted 1'],
+        self.assertEqual(['<hostedgraphite API key>.stats.alerted 1\n'],
                          self.sent_to_graphite)
 
     def test_test_mode(self):
