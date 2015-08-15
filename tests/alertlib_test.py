@@ -3,6 +3,7 @@
 """Tests for alertlib/__init__.py."""
 
 import contextlib
+import json
 import logging
 import sys
 import syslog
@@ -16,6 +17,7 @@ fake_secrets = types.ModuleType('secrets')
 fake_secrets.__name__ = 'secrets'
 fake_secrets.hipchat_alertlib_token = '<hipchat token>'
 fake_secrets.hostedgraphite_api_key = '<hostedgraphite API key>'
+fake_secrets.slack_alertlib_webhook_url = '<slack webhook url>'
 sys.modules['secrets'] = fake_secrets
 
 # And we want the google tests to work even without appengine installed.
@@ -48,9 +50,11 @@ class TestBase(unittest.TestCase):
         self.maxDiff = None      # (We can have big diffs if tests fail)
 
         self.sent_to_hipchat = []
+        self.sent_to_slack = []
         self.sent_to_google_mail = []
         self.sent_to_sendmail = []
         self.sent_to_info_log = []
+        self.sent_to_warning_log = []
         self.sent_to_error_log = []
         self.sent_to_syslog = []
         self.sent_to_graphite = []
@@ -76,6 +80,9 @@ class TestBase(unittest.TestCase):
         self.mock(alertlib.Alert, '_make_hipchat_api_call',
                   lambda s, post_dict: self.sent_to_hipchat.append(post_dict))
 
+        self.mock(alertlib.Alert, '_make_slack_webhook_post',
+                  lambda s, payload: self.sent_to_slack.append(payload))
+
         self.mock(alertlib.google_mail, 'send_mail',
                   lambda **kwargs: self.sent_to_google_mail.append(kwargs))
 
@@ -83,6 +90,9 @@ class TestBase(unittest.TestCase):
 
         self.mock(alertlib.logging, 'info',
                   lambda *args: self.sent_to_info_log.append(args))
+
+        self.mock(alertlib.logging, 'warning',
+                  lambda *args: self.sent_to_warning_log.append(args))
 
         self.mock(alertlib.logging, 'error',
                   lambda *args: self.sent_to_error_log.append(args))
@@ -241,6 +251,71 @@ class HipchatTest(TestBase):
                            'notify': 0,
                            'room_id': 'rm'}],
                          self.sent_to_hipchat)
+
+
+class SlackTest(TestBase):
+    def test_default_options(self):
+        alertlib.Alert('test message').send_to_slack('#bot-testing')
+        actual = json.loads(self.sent_to_slack[0])
+        self.assertEqual(actual['channel'], '#bot-testing')
+        self.assertEqual(actual['username'], 'AlertiGator')
+        self.assertEqual(actual['icon_emoji'], ':crocodile:')
+        self.assertEqual(len(actual['attachments']), 1)
+        self.assertEqual(actual['attachments'][0]['text'], 'test message')
+        self.assertEqual(actual['attachments'][0]['fallback'], 'test message')
+
+    def test_specified_options(self):
+        alertlib.Alert('test message').send_to_slack('#bot-testing',
+                                                     sender='Bob Bot',
+                                                     icon_emoji=':poop:')
+        actual = json.loads(self.sent_to_slack[0])
+        self.assertEqual(actual['channel'], '#bot-testing')
+        self.assertEqual(actual['username'], 'Bob Bot')
+        self.assertEqual(actual['icon_emoji'], ':poop:')
+        self.assertEqual(len(actual['attachments']), 1)
+
+    def test_default_alert_with_summary(self):
+        alertlib.Alert('xyz', summary='ABC').send_to_slack('#bot-testing')
+        actual = json.loads(self.sent_to_slack[0])
+        self.assertEqual(len(actual['attachments']), 1)
+        self.assertEqual(actual['attachments'][0]['pretext'], 'ABC')
+        self.assertEqual(actual['attachments'][0]['text'], 'xyz')
+        self.assertEqual(actual['attachments'][0]['fallback'], 'ABC - xyz')
+
+    def test_default_alert_with_severity(self):
+        alertlib.Alert('test message', severity=logging.CRITICAL) \
+            .send_to_slack('#bot-testing')
+        actual = json.loads(self.sent_to_slack[0])
+        self.assertEqual(len(actual['attachments']), 1)
+        self.assertEqual(actual['attachments'][0]['color'], 'danger')
+
+    def test_simple_message(self):
+        alertlib.Alert('test message') \
+            .send_to_slack('#bot-testing', simple_message=True)
+        actual = json.loads(self.sent_to_slack[0])
+        self.assertEqual(actual['text'], 'test message')
+        self.assertIsNone(actual.get('attachments'))
+
+    def test_custom_attachments(self):
+        alertlib.Alert('test message').send_to_slack(
+            '#bot-testing',
+            attachments=[
+                {"text": "hi mom"},
+                {"text": "hi dad", "color": "#abcdef"}
+            ]
+        )
+        actual = json.loads(self.sent_to_slack[0])
+        self.assertIsNone(actual.get('text'))
+        self.assertEqual(len(actual['attachments']), 2)
+        self.assertEqual(actual['attachments'][0]['text'], 'hi mom')
+        self.assertEqual(actual['attachments'][1]['text'], 'hi dad')
+        self.assertEqual(actual['attachments'][1]['color'], '#abcdef')
+
+    def test_warn_on_html(self):
+        alertlib.Alert('test <b>message</b>', html=True) \
+            .send_to_slack('#bot-testing')
+        self.assertIn("Unsupported HTML msg being sent to Slack!: %s",
+                      self.sent_to_warning_log[0])
 
 
 class EmailTest(TestBase):

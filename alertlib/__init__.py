@@ -22,7 +22,8 @@ or, if you don't like chaining:
 
 The backends supported are:
 
-    * KA hipchat room
+    * KA HipChat room
+    * KA Slack channel
     * KA email
     * KA PagerDuty account
     * Logs -- GAE logs on appengine, or syslogs on a unix box
@@ -49,6 +50,7 @@ When sending to email, we try using both google appengine (for when
 you're using this within an appengine app) and sendmail.
 """
 
+import json
 import logging
 import re
 import socket
@@ -86,10 +88,12 @@ try:
         import secrets
     hipchat_token = secrets.hipchat_alertlib_token
     hostedgraphite_api_key = secrets.hostedgraphite_api_key
+    slack_webhook_url = secrets.slack_alertlib_webhook_url
 except ImportError:
     # If this fails, you don't have secrets.py set up as needed for this lib.
     hipchat_token = None
     hostedgraphite_api_key = None
+    slack_webhook_url = None
 
 
 # We want to convert a PagerDuty service name to an email address
@@ -230,7 +234,7 @@ class Alert(object):
 
     # ----------------- HIPCHAT ------------------------------------------
 
-    _LOG_PRIORITY_TO_COLOR = {
+    _LOG_PRIORITY_TO_HIPCHAT_COLOR = {
         logging.DEBUG: "gray",
         logging.INFO: "purple",
         logging.WARNING: "yellow",
@@ -283,7 +287,7 @@ class Alert(object):
             return self
 
         if color is None:
-            color = self._mapped_severity(self._LOG_PRIORITY_TO_COLOR)
+            color = self._mapped_severity(self._LOG_PRIORITY_TO_HIPCHAT_COLOR)
 
         if notify is None:
             notify = (self.severity == logging.CRITICAL)
@@ -330,6 +334,175 @@ class Alert(object):
                 'message_format': 'html' if self.html else 'text',
                 'notify': int(notify),
                 'color': color})
+
+        return self      # so we can chain the method calls
+
+    # ----------------- SLACK ---------------------------------------------
+    # 'good'=green, 'warning'=yellow, 'danger'=red, or use hex colors
+    _LOG_PRIORITY_TO_SLACK_COLOR = {
+        logging.DEBUG: "",  # blank = uses default color which is light grayish
+        logging.INFO: "",
+        logging.WARNING: "warning",
+        logging.ERROR: "danger",
+        logging.CRITICAL: "danger"
+        }
+
+    def _make_slack_webhook_post(self, payload_json):
+        # This is a separate function just to make it easy to mock for tests.
+        req = urllib2.Request(slack_webhook_url)
+        req.add_header("Content-Type", "application/json")
+        res = urllib2.urlopen(req, payload_json)
+        if res.getcode() != 200:
+            raise ValueError(res.read())
+
+    def _post_to_slack(self, payload_json):
+        if not slack_webhook_url:
+            logging.warning("Not sending to slack (no webhook url found): %s",
+                            payload_json)
+            return
+        try:
+            self._make_slack_webhook_post(payload_json)
+        except Exception as e:
+            logging.error("Failed sending %s to slack: %s" % (payload_json, e))
+
+    def _slack_payload(self, channel,
+                       simple_message,
+                       attachments,
+                       link_names,
+                       unfurl_links,
+                       unfurl_media,
+                       icon_url,
+                       icon_emoji,
+                       sender):
+        payload = {"channel": channel, "link_names": link_names,
+                   "unfurl_links": unfurl_links, "unfurl_media": unfurl_media,
+                   "username": sender}
+        # hipchat has a 10,000 char limit on messages, we leave some leeway
+        # not sure what slack's limit is (undocumented?) so for now just use
+        # the same as hipchat and see what happens.
+        # TODO(mroth): test and find the actual limit (or ask SlackHQ)
+        message = self.message[:9000]
+
+        if icon_url:
+            payload["icon_url"] = icon_url
+        if icon_emoji:
+            payload["icon_emoji"] = icon_emoji
+
+        if simple_message:                          # "simple message" case
+            payload["text"] = message
+        elif attachments:                           # "attachments" case
+            # the documentation tells people only to pass us a list even with a
+            # single element (since we want them to be familiar with Slack API)
+            # but if they just pass us a dict, be nice and handle for them,
+            # since its a very common use-case to want to send a single
+            # attachment dict and easy to forget to wrap it
+            if not isinstance(attachments, list):
+                attachments = [attachments]
+            payload["attachments"] = attachments
+        else:                                       # "alertlib style" case
+            color = self._mapped_severity(self._LOG_PRIORITY_TO_SLACK_COLOR)
+            fallback = ("{} - {}".format(self.summary, message)
+                        if self.summary else message)
+            attachment = {
+                "text": message,
+                "color": color,
+                "fallback": fallback,
+                "mrkdwn_in": ["text", "pretext"]
+                }
+            if self.summary:
+                attachment["pretext"] = self.summary
+            payload["attachments"] = [attachment]
+        return payload
+
+    def send_to_slack(self, channel,
+                      simple_message=False,
+                      attachments=None,
+                      link_names=True,
+                      unfurl_links=False,
+                      unfurl_media=True,
+                      icon_url=None,
+                      icon_emoji=":crocodile:",
+                      sender='AlertiGator'):
+        """Send the alert message to Slack.
+
+        This wraps a subset of the Slack API incoming webhook in order to
+        make it behave closer to the default expectations of an AlertLib user,
+        while still enabling customization of results.
+
+        If the alert is HTML formatted, it will not be displayed correctly on
+        Slack, but for now this method will only WARN in the logs rather than
+        error in this condition. In the future, this may change.
+
+        For the default case, try to emulate HipChat style msgs from AlertLib.
+        The color of the message will be based on the `Alert.severity`.
+
+        There are two notable exceptions regarding formatting style.
+
+        ### Simple Messages
+        First, if `simple_message=True` is passed, the message will be passed
+        along to Slack using normal simple Markdown formatting, instead of
+        being rendered as "attachment" style.
+
+        ### Attachments
+        Second, if an "attachments" dict list is passed, these will be passed
+        along to Slack to enable very detailed message display parameters.
+
+        See https://api.slack.com/docs/attachments for attachment details, and
+        https://api.slack.com/docs/formatting for more on formatting.
+
+        Note that when passing attachments to Slack, AlertLib will by default
+        ignore the `Alert.message`, on the assumption that you will be
+        providing your entire UI via the attachment.
+
+
+        Arguments:
+            channel: Slack channel name or encoded ID.
+                e.g. '#1s-and-0s' or 'hip-slack' or 'C1234567890'.
+                (Note that channel names start with a hashtag whereas private
+                groups do not.)
+
+            simple_message: If True, send as a simple Slack message rather than
+                constructing a standard AlertLib style formatted message.
+
+            attachments: List of "attachments" dicts for advanced formatting.
+                Even if you are only sending one attachment, you must place it
+                in a list.
+
+            link_names: Automatically link channels and usernames in message.
+                If disabled, user and channel names will need need to be
+                explicitly marked up in order to be linked, e.g. <@mroth> or
+                <#hipslack>.
+
+            unfurl_links: Enable unfurling of primarily text-based content.
+
+            unfurl_media: Enable unfurling of media content.
+
+            icon_url: URL to an image to use as the icon for this message.
+
+            icon_emoji: Emoji to use as the icon for this message.
+                Overrides icon_url if present. Default is ":alligator:"
+
+            sender: Name of the bot.
+                Default if not specified will be "AlertiGator".
+        """
+        if not self._passed_rate_limit('slack'):
+            return self
+
+        if self.html:
+            logging.warning("Unsupported HTML msg being sent to Slack!: %s",
+                            self.message)
+
+        payload = self._slack_payload(
+            channel, simple_message=simple_message, attachments=attachments,
+            link_names=link_names, unfurl_links=unfurl_links,
+            unfurl_media=unfurl_media, icon_url=icon_url,
+            icon_emoji=icon_emoji, sender=sender)
+        payload_json = json.dumps(payload)
+        if _TEST_MODE:
+            logging.info("alertlib: would send to slack channel %s: %s"
+                         % (channel, payload_json))
+        else:
+            self._post_to_slack(payload_json)
 
         return self      # so we can chain the method calls
 
