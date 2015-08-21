@@ -745,3 +745,9 @@ class Alert(object):
                 logging.error('Failed sending to graphite: %s' % why)
 
         return self
+
+__all__ = [
+    enter_test_mode,
+    exit_test_mode,
+    Alert
+]
