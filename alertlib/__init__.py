@@ -463,6 +463,9 @@ class Alert(object):
 
             simple_message: If True, send as a simple Slack message rather than
                 constructing a standard AlertLib style formatted message.
+                A simple message does not use the 'attachment' mechanism,
+                meaning the text is not indented nor does it have a colored
+                side-bar.
 
             attachments: List of "attachments" dicts for advanced formatting.
                 Even if you are only sending one attachment, you must place it
