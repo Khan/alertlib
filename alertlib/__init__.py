@@ -145,29 +145,30 @@ def _graphite_socket(graphite_hostport):
 
 
 class Alert(object):
-
-    """An alert message can be sent to multiple destinations."""
+    """An alert message that can be sent to multiple destinations."""
 
     def __init__(self, message, summary=None, severity=logging.INFO,
                  html=False, rate_limit=None):
         """Create a new Alert.
 
         Arguments:
-
-        message: the message to alert.  The message may be either unicode
-            or utf-8 (but is stored internally as unicode).
-        summary: a summary of the message, used as subject lines for email,
-            for instance.  If omitted, the summary is taken as the first
-            sentence of the message (but only when html==False), up to
-            60 characters.  The summary may be either unicode or utf-8
-            (but is stored internally as unicode.)
-        severity: can be any logging level (ERROR, CRITICAL, INFO, etc).
-            We do our best to encode the severity into each backend to
-            the extent it's practical.
-        html: True if the message should be treated as html, not text.
-        rate_limit: if not None, this Alert object will only emit
-            messages of a certain kind (hipchat, log, etc) once every
-            rate_limit seconds.
+            message: the message to alert.  The message may be either
+                unicode or utf-8 (but is stored internally as unicode).
+            summary: a summary of the message, used as subject lines for
+                email, for instance.  If omitted, the summary is taken as
+                the first sentence of the message (but only when
+                html==False), up to 60 characters.  The summary may be
+                either unicode or utf-8 (but is stored internally as
+                unicode.)
+            severity: can be any logging level (ERROR, CRITICAL, INFO, etc).
+                We do our best to encode the severity into each backend to
+                the extent it's practical.
+            html: True if the message should be treated as html, not text.
+                TODO(csilvers): accept markdown instead, and convert it
+                to html (or text) for clients that want that.
+            rate_limit: if not None, this Alert object will only emit
+                messages of a certain kind (hipchat, log, etc) once every
+                rate_limit seconds.
         """
         self.message = message
         self.summary = summary
@@ -453,7 +454,6 @@ class Alert(object):
         Note that when passing attachments to Slack, AlertLib will by default
         ignore the `Alert.message`, on the assumption that you will be
         providing your entire UI via the attachment.
-
 
         Arguments:
             channel: Slack channel name or encoded ID.

@@ -51,16 +51,14 @@ alertlib.Alert("It's time for a walk!")                 \
    .send_to_graphite(...)
 ```
 
-### HTML formatting (for HipChat)
+### HTML formatting (for HipChat and email)
 Alert messages may contain HTML markup if you set the `html=True` parameter on
 the Alert.
 
-Note that this option is not recommended unless you **know** you will _only_ be
-posting messages to HipChat.
-
-If you want to use HTML formatting for HipChat and something else everywhere
-else _(during a company transition from HipChat to Slack, for example)_, you can
-simply create two different alerts:
+This option should not be used -- and your message should not contain
+html -- if you are sending the message to Slack, since Slack uses
+markdown rather than HTML.  If you want to send a message to slack
+and another destination, use two alerts:
 
 ```python
 alertlib.Alert("Message for <b>HipChat<b>", html=True).send_to_hipchat(...)
