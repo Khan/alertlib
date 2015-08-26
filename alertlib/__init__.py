@@ -473,9 +473,11 @@ class Alert(object):
                 explicitly marked up in order to be linked, e.g. <@mroth> or
                 <#hipslack>.
 
-            unfurl_links: Enable unfurling of primarily text-based content.
+            unfurl_links: Enable unfurling -- showing a content preview --
+                of primarily text-based content.
 
-            unfurl_media: Enable unfurling of media content.
+            unfurl_media: Enable unfurling -- showing a content preview --
+                of media content.
 
             icon_url: URL to an image to use as the icon for this message.
 
