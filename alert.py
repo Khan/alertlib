@@ -80,8 +80,11 @@ def setup_parser():
                               'how we alert (default: %(default)s)'))
     parser.add_argument('--html', action='store_true', default=False,
                         help=('Indicate the input should be treated as html'))
-    parser.add_argument('--chat-sender', default='AlertiGator',
-                        help=('Who we say sent this chat message.'))
+    parser.add_argument('--chat-sender', default=None,
+                        help=('Who we say sent this chat message. '
+                              'In HipChat, defaults to AlertiGator. '
+                              "In Slack, defaults to whatever the webhook's "
+                              'default is, likely also AlertiGator.'))
     parser.add_argument('--color', default=None,
                         choices=['yellow', 'red', 'green', 'purple',
                                  'gray', 'random'],
@@ -117,7 +120,8 @@ def alert(message, args):
     a = alertlib.Alert(message, args.summary, args.severity, html=args.html)
 
     for room in args.hipchat:
-        a.send_to_hipchat(room, args.color, args.notify, args.chat_sender)
+        a.send_to_hipchat(room, args.color, args.notify,
+                          args.chat_sender or 'AlertiGator')
 
     for channel in args.slack:
         a.send_to_slack(channel, sender=args.chat_sender)

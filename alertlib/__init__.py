@@ -376,8 +376,7 @@ class Alert(object):
                        icon_emoji,
                        sender):
         payload = {"channel": channel, "link_names": link_names,
-                   "unfurl_links": unfurl_links, "unfurl_media": unfurl_media,
-                   "username": sender}
+                   "unfurl_links": unfurl_links, "unfurl_media": unfurl_media}
         # hipchat has a 10,000 char limit on messages, we leave some leeway
         # not sure what slack's limit is (undocumented?) so for now just use
         # the same as hipchat and see what happens.
@@ -388,6 +387,8 @@ class Alert(object):
             payload["icon_url"] = icon_url
         if icon_emoji:
             payload["icon_emoji"] = icon_emoji
+        if sender:
+            payload["username"] = sender
 
         if simple_message:                          # "simple message" case
             payload["text"] = message
@@ -422,8 +423,8 @@ class Alert(object):
                       unfurl_links=False,
                       unfurl_media=True,
                       icon_url=None,
-                      icon_emoji=":crocodile:",
-                      sender='AlertiGator'):
+                      icon_emoji=None,
+                      sender=None):
         """Send the alert message to Slack.
 
         This wraps a subset of the Slack API incoming webhook in order to
@@ -485,10 +486,12 @@ class Alert(object):
             icon_url: URL to an image to use as the icon for this message.
 
             icon_emoji: Emoji to use as the icon for this message.
-                Overrides icon_url if present. Default is ":alligator:"
+                Default is to use the Slack integration's default setting,
+                which is likely :crocodile:.
 
             sender: Name of the bot.
-                Default if not specified will be "AlertiGator".
+                Default is to use the Slack integration's default setting,
+                which is likely "AlertiGator".
         """
         if not self._passed_rate_limit('slack'):
             return self
