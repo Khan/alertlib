@@ -46,8 +46,10 @@ def setup_parser():
     parser.add_argument('--slack', default=[], action=_MakeList,
                         help=('Send to Slack.  Argument is a comma-'
                               'separated list of channel names. '
-                              'May specify --severity and/or --summary '
-                              'and/or --chat-sender. '))
+                              'May specify --severity and/or --summary. '
+                              'May specify --chat-sender and/or '
+                              '--icon-emoji or --icon-url '
+                              '(if omitted Slack determines automatically).'))
     parser.add_argument('--mail', default=[], action=_MakeList,
                         help=('Send to KA email.  Argument is a comma-'
                               'separated list of usernames. '
@@ -85,6 +87,13 @@ def setup_parser():
                               'In HipChat, defaults to AlertiGator. '
                               "In Slack, defaults to whatever the webhook's "
                               'default is, likely also AlertiGator.'))
+    parser.add_argument('--icon-emoji', default=None,
+                        help=('The emoji sender to use for this message. '
+                              'Slack only.  Defaults to whatever the '
+                              "webhook's default is, likely :crocodile:"))
+    parser.add_argument('--icon-url', default=None,
+                        help=('The icon URL to use for this message. '
+                              'Slack only.  Overridden by --icon-emoji.'))
     parser.add_argument('--color', default=None,
                         choices=['yellow', 'red', 'green', 'purple',
                                  'gray', 'random'],
@@ -124,7 +133,8 @@ def alert(message, args):
                           args.chat_sender or 'AlertiGator')
 
     for channel in args.slack:
-        a.send_to_slack(channel, sender=args.chat_sender)
+        a.send_to_slack(channel, sender=args.chat_sender,
+                        icon_url=args.icon_url, icon_emoji=args.icon_emoji)
 
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
