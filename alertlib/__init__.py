@@ -400,10 +400,28 @@ class Alert(object):
             # attachment dict and easy to forget to wrap it
             if not isinstance(attachments, list):
                 attachments = [attachments]
+            for attachment in attachments:
+                # Many times, when writing a custom attachment, people forget
+                # to specify a fallback.  Se we'll do it for them.  Slack will
+                # automatically convert "<url|text>" to "text url" on fallback
+                # clients; for any other markdown we may have put in, we let it
+                # be; a lot of IRC clients will interpret it anyway, and it's
+                # still readable if they don't.
+                if 'fallback' not in attachment:
+                    texts = []
+                    if 'pretext' in attachment:
+                        texts.append(attachment['pretext'])
+                    if 'text' in attachment:
+                        texts.append(attachment['text'])
+                    if 'fields' in attachment:
+                        for field in attachment['fields']:
+                            texts.append("%s: %s" % (field['title'],
+                                                     field['value']))
+                    attachment['fallback'] = '\n'.join(texts)
             payload["attachments"] = attachments
         else:                                       # "alertlib style" case
             color = self._mapped_severity(self._LOG_PRIORITY_TO_SLACK_COLOR)
-            fallback = ("{} - {}".format(self.summary, message)
+            fallback = ("{}\n{}".format(self.summary, message)
                         if self.summary else message)
             attachment = {
                 "text": message,
@@ -450,7 +468,8 @@ class Alert(object):
         along to Slack to enable very detailed message display parameters.
 
         See https://api.slack.com/docs/attachments for attachment details, and
-        https://api.slack.com/docs/formatting for more on formatting.
+        https://api.slack.com/docs/formatting for more on formatting.  If you
+        don't specify fallback text, AlertLib will fill it in for you.
 
         Note that when passing attachments to Slack, AlertLib will by default
         ignore the `Alert.message`, on the assumption that you will be
