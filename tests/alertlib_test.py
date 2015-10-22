@@ -258,8 +258,6 @@ class SlackTest(TestBase):
         alertlib.Alert('test message').send_to_slack('#bot-testing')
         actual = json.loads(self.sent_to_slack[0])
         self.assertEqual(actual['channel'], '#bot-testing')
-        self.assertEqual(actual['username'], 'AlertiGator')
-        self.assertEqual(actual['icon_emoji'], ':crocodile:')
         self.assertEqual(len(actual['attachments']), 1)
         self.assertEqual(actual['attachments'][0]['text'], 'test message')
         self.assertEqual(actual['attachments'][0]['fallback'], 'test message')
@@ -280,7 +278,7 @@ class SlackTest(TestBase):
         self.assertEqual(len(actual['attachments']), 1)
         self.assertEqual(actual['attachments'][0]['pretext'], 'ABC')
         self.assertEqual(actual['attachments'][0]['text'], 'xyz')
-        self.assertEqual(actual['attachments'][0]['fallback'], 'ABC - xyz')
+        self.assertEqual(actual['attachments'][0]['fallback'], 'ABC\nxyz')
 
     def test_default_alert_with_severity(self):
         alertlib.Alert('test message', severity=logging.CRITICAL) \
@@ -305,7 +303,7 @@ class SlackTest(TestBase):
             ]
         )
         actual = json.loads(self.sent_to_slack[0])
-        self.assertIsNone(actual.get('text'))
+        self.assertEqual(actual.get('text'), '\n')
         self.assertEqual(len(actual['attachments']), 2)
         self.assertEqual(actual['attachments'][0]['text'], 'hi mom')
         self.assertEqual(actual['attachments'][1]['text'], 'hi dad')

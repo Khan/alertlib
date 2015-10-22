@@ -368,6 +368,7 @@ class Alert(object):
 
     def _slack_payload(self, channel,
                        simple_message,
+                       intro,
                        attachments,
                        link_names,
                        unfurl_links,
@@ -419,6 +420,8 @@ class Alert(object):
                                                      field['value']))
                     attachment['fallback'] = '\n'.join(texts)
             payload["attachments"] = attachments
+            payload['text'] = intro + '\n'
+
         else:                                       # "alertlib style" case
             color = self._mapped_severity(self._LOG_PRIORITY_TO_SLACK_COLOR)
             fallback = ("{}\n{}".format(self.summary, message)
@@ -427,17 +430,20 @@ class Alert(object):
                 "text": message,
                 "color": color,
                 "fallback": fallback,
-                "mrkdwn_in": ["text", "pretext"]
-                }
+                "mrkdwn_in": ["text", "pretext"],
+            }
+            payload['text'] = intro + '\n'
             if self.summary:
                 attachment["pretext"] = self.summary
             payload["attachments"] = [attachment]
+
         return payload
 
     def send_to_slack(self, channel,
                       simple_message=False,
+                      intro='',
                       attachments=None,
-                      link_names=True,
+                      link_names=1,
                       unfurl_links=False,
                       unfurl_media=True,
                       icon_url=None,
@@ -485,11 +491,17 @@ class Alert(object):
                 constructing a standard AlertLib style formatted message.
                 A simple message does not use the 'attachment' mechanism,
                 meaning the text is not indented nor does it have a colored
-                side-bar.
+                side-bar.  If True, @mentions in self.message will trigger
+                notifications.
+
+            intro: Text that will go ahead of the message and attachments.
+                @mentions in this text will trigger desktop and phone
+                notifications.  Will be ignored if simple_message is True.
 
             attachments: List of "attachments" dicts for advanced formatting.
                 Even if you are only sending one attachment, you must place it
-                in a list.
+                in a list.  @mentions in attachment texts and pretexts do not
+                trigger notifications.
 
             link_names: Automatically link channels and usernames in message.
                 If disabled, user and channel names will need need to be
@@ -520,10 +532,10 @@ class Alert(object):
                             self.message)
 
         payload = self._slack_payload(
-            channel, simple_message=simple_message, attachments=attachments,
-            link_names=link_names, unfurl_links=unfurl_links,
-            unfurl_media=unfurl_media, icon_url=icon_url,
-            icon_emoji=icon_emoji, sender=sender)
+            channel, simple_message=simple_message, intro=intro,
+            attachments=attachments, link_names=link_names,
+            unfurl_links=unfurl_links, unfurl_media=unfurl_media,
+            icon_url=icon_url, icon_emoji=icon_emoji, sender=sender)
         payload_json = json.dumps(payload)
         if _TEST_MODE:
             logging.info("alertlib: would send to slack channel %s: %s"
