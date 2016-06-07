@@ -10,6 +10,7 @@ import syslog
 import time
 import types
 import unittest
+import urllib2
 
 # Before we can import alertlib, we need to define a module 'secrets'
 # so the alertlib import can succeed
@@ -18,6 +19,7 @@ fake_secrets.__name__ = 'secrets'
 fake_secrets.hipchat_alertlib_token = '<hipchat token>'
 fake_secrets.hostedgraphite_api_key = '<hostedgraphite API key>'
 fake_secrets.slack_alertlib_webhook_url = '<slack webhook url>'
+fake_secrets.asana_api_token = '<asana api token>'
 sys.modules['secrets'] = fake_secrets
 
 # And we want the google tests to work even without appengine installed.
@@ -43,6 +45,19 @@ def disable_google_mail():
         alertlib.Alert._send_to_gae_email = orig_send_to_gae_email
 
 
+class MockResponse:
+    """Mock of urllib2.Request object with only necessary methods."""
+    def __init__(self, mock_read_val, mock_status_code):
+        self.mock_read_val = json.dumps({'data': mock_read_val})
+        self.mock_status_code = mock_status_code
+
+    def read(self):
+        return self.mock_read_val
+
+    def getcode(self):
+        return self.mock_status_code
+
+
 class TestBase(unittest.TestCase):
     def setUp(self):
         super(TestBase, self).setUp()
@@ -51,6 +66,7 @@ class TestBase(unittest.TestCase):
 
         self.sent_to_hipchat = []
         self.sent_to_slack = []
+        self.sent_to_asana = []
         self.sent_to_google_mail = []
         self.sent_to_sendmail = []
         self.sent_to_info_log = []
@@ -104,8 +120,13 @@ class TestBase(unittest.TestCase):
                   lambda hostname: FakeGraphiteSocket)
 
     def tearDown(self):
-        # None of the tests should have caused any errors.
+        # None of the tests should have caused any errors unless specifcally
+        # tested for in the test itself, which should reset sent_to_error_log
+        # to [] before returning
         self.assertEqual([], self.sent_to_error_log)
+
+        alertlib._CACHED_ASANA_TAG_MAP = {}
+        alertlib._CACHED_ASANA_PROJECT_MAP = {}
 
     def mock(self, container, var_str, new_value):
         if hasattr(container, var_str):
@@ -114,6 +135,64 @@ class TestBase(unittest.TestCase):
         else:
             self.addCleanup(lambda: delattr(container, var_str))
         setattr(container, var_str, new_value)
+
+    def mock_urlopen(self, on_check_exists_vals=None, on_get_tags_vals=None,
+                     on_get_projects_vals=None, on_post_vals=None):
+        """Remocks the urllib2 urlopen with the given response parameters.
+
+        Each parameter is a tuple (read_val, status_code) if a response is
+        expected. If an Exception is expected, the parameter is a tuple:
+        (Exception(message), 'Exception') where the second tuple element is
+        unused. If any of the parameters are None, the below default values
+        will be used (in general, at most one of these parameters is supplied
+        per test case).
+        """
+        default_on_check_exists_vals = ([], 200)
+        default_on_get_tags_vals = ([{'id': 44, 'name': 'P4'},
+                                    {'id': 0, 'name': 'P3'},
+                                    {'id': 10, 'name': 'P2'},
+                                    {'id': 100, 'name': 'P1'},
+                                    {'id': 1, 'name': 'Evil tag'},
+                                    {'id': 2, 'name': 'Evil tag'},
+                                    {'id': 3, 'name': 'Evil tag'},
+                                    {'id': 666, 'name': 'Auto generated'}],
+                                    200)
+        default_on_get_projects_vals = ([{'id': 0, 'name':
+                                         'Engineering support'},
+                                        {'id': 1, 'name': 'Evil project'},
+                                        {'id': 2, 'name': 'Evil project'},
+                                        {'id': 3, 'name': 'Evil project'}],
+                                        200)
+        default_on_post_vals = ([], 200)
+
+        on_check_exists_vals = (on_check_exists_vals or
+                                default_on_check_exists_vals)
+        on_get_tags_vals = on_get_tags_vals or default_on_get_tags_vals
+        on_get_projects_vals = (on_get_projects_vals or
+                                default_on_get_projects_vals)
+        on_post_vals = on_post_vals or default_on_post_vals
+
+        def new_mock_urlopen(request, data=None):
+            request_url = request.get_full_url()
+            if 'completed' in request_url:
+                (mock_read_val, mock_status_code) = on_check_exists_vals
+            elif '/api/1.0/tags?workspace=' in request_url:
+                (mock_read_val, mock_status_code) = on_get_tags_vals
+            elif '/api/1.0/projects?workspace=' in request_url:
+                (mock_read_val, mock_status_code) = on_get_projects_vals
+            elif data is not None:
+                (mock_read_val, mock_status_code) = on_post_vals
+                is_exception = isinstance(mock_read_val, Exception)
+                if not is_exception and mock_status_code < 300:
+                    self.sent_to_asana.append(json.loads(data))
+            else:
+                raise Exception('Invalid Asana API url')
+
+            if isinstance(mock_read_val, Exception):
+                raise mock_read_val
+            return MockResponse(mock_read_val, mock_status_code)
+
+        self.mock(urllib2, 'urlopen', new_mock_urlopen)
 
 
 class HipchatTest(TestBase):
@@ -251,6 +330,508 @@ class HipchatTest(TestBase):
                            'notify': 0,
                            'room_id': 'rm'}],
                          self.sent_to_hipchat)
+
+
+class AsanaTest(TestBase):
+
+    def test_tags_no_severity(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+    def test_severity_no_tags(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.WARNING)
+        alert.send_to_asana(project=project_name)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+        self.sent_to_asana = []
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.ERROR)
+        alert.send_to_asana(project=project_name)
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P2']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+        self.sent_to_asana = []
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.CRITICAL)
+        alert.send_to_asana(project=project_name)
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P1']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+    def test_severity_and_tags(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3', 'P1']
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.ERROR)
+        alert.send_to_asana(project=project_name, tags=tag_names)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(alertlib._CACHED_ASANA_TAG_MAP['P1'])
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+    def test_duplicate_task(self):
+        on_check_exists_vals = ([{'name': 'hi', 'completed': False}], 200)
+        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Engineering support'
+        tag_names = ['P3']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+
+    def test_overloaded_tags(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['Evil tag']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['P4'])
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        self.assertTrue(len(expected_tag_ids) > 1)
+
+    def test_overloaded_project(self):
+        self.mock_urlopen()
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['Evil tag']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['P4'])
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        self.assertTrue(len(expected_project_ids) > 1)
+
+    def test_invalid_project(self):
+        self.mock_urlopen()
+
+        project_name = 'Invalid project name'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        self.assertEqual([('Invalid asana project name; task not created.',)],
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_all_invalid_tags(self):
+        self.mock_urlopen()
+
+        project_name = 'Evil project'
+        tag_names = ['llama', 'also llama']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[
+            'Evil project']
+        expected_tag_ids = []
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['P4'])
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        expected_error_log = [('Invalid asana tag name: llama; tag not added '
+                               'to task.',),
+                              ('Invalid asana tag name: also '
+                               'llama; tag not added to task.',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_some_invalid_tags(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3', 'llama']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        expected_error_log = [('Invalid asana tag name: llama; tag not added'
+                               ' to task.',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_no_summary(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3']
+        alert = alertlib.Alert('test message')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'New Auto generated Asana task',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+    # won't fail, but will make duplicate task
+    def test_urlopen_exception_duplicate_on_check_exists(self):
+        on_check_exists_vals = (Exception('Test failure'), 'Exception')
+        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Engineering support'
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.WARNING)
+        alert.send_to_asana(project=project_name)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana because of Test'
+                               ' failure',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    # won't fail
+    def test_urlopen_exception_no_duplicate_on_check_exists(self):
+        on_check_exists_vals = (Exception('Test failure'), 'Exception')
+        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Engineering support'
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.WARNING)
+        alert.send_to_asana(project=project_name)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana because of Test'
+                               ' failure',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_exception_on_get_tags(self):
+        on_get_tags_vals = (Exception('Failed gettings tags'), 'Exception')
+        self.mock_urlopen(on_get_tags_vals=on_get_tags_vals)
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana because of Failed'
+                               ' gettings tags',),
+                              ('Failed to build Asana tags cache. Task will'
+                               ' not be created',),
+                              ('Failed to retrieve asana tag name to tag id'
+                               ' mapping. Task will not be created.',)]
+
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_exception_on_get_projects(self):
+        on_get_projects_vals = (Exception('Failed getting projects'),
+                                'Exception')
+        self.mock_urlopen(on_get_projects_vals=on_get_projects_vals)
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana because of Failed'
+                               ' getting projects',),
+                              ('Invalid asana project name; task not '
+                               'created.',)]
+
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_exception_on_post(self):
+        on_post_vals = (Exception('Test failure'), 'Exception')
+        self.mock_urlopen(on_post_vals=on_post_vals)
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        expected_error_log = [('Failed sending {"data": {"name": "hi", "tags":'
+                               ' [1, 2, 3, 44, 666], "notes": "test message", '
+                               '"followers": [], "workspace": 1120786379245, '
+                               '"projects": [1, 2, 3]}} to asana because of '
+                               'Test failure',)]
+
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    # won't fail, but will make duplicate task
+    def test_urlopen_bad_status_code_duplicate_on_check_exists(self):
+        on_check_exists_vals = ([{'name': 'hi', 'completed': False}], 400)
+        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Engineering support'
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.WARNING)
+        alert.send_to_asana(project=project_name)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana with code 400',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    # won't fail
+    def test_urlopen_bad_status_code_no_duplicate_on_check_exists(self):
+        on_check_exists_vals = ([], 400)
+        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Engineering support'
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.WARNING)
+        alert.send_to_asana(project=project_name)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana with code 400',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_bad_status_code_on_get_tags(self):
+        on_get_tags_vals = ([{'id': 44, 'name': 'P4'},
+                            {'id': 0, 'name': 'P3'},
+                            {'id': 10, 'name': 'P2'},
+                            {'id': 100, 'name': 'P1'},
+                            {'id': 1, 'name': 'Evil tag'},
+                            {'id': 2, 'name': 'Evil tag'},
+                            {'id': 3, 'name': 'Evil tag'},
+                            {'id': 666, 'name': 'Auto generated'}],
+                            400)
+        self.mock_urlopen(on_get_tags_vals=on_get_tags_vals)
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana with code 400',),
+                              ('Failed to build Asana tags cache. Task will'
+                               ' not be created',),
+                              ('Failed to retrieve asana tag name to tag id'
+                               ' mapping. Task will not be created.',)]
+
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_bad_status_code_on_get_projects(self):
+        on_get_projects_vals = ([{'id': 0, 'name':
+                                  'Engineering support'},
+                                 {'id': 1, 'name': 'Evil project'},
+                                 {'id': 2, 'name': 'Evil project'},
+                                 {'id': 3, 'name': 'Evil project'}],
+                                400)
+        self.mock_urlopen(on_get_projects_vals=on_get_projects_vals)
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        expected_error_log = [('Failed sending None to asana with code 400',),
+                              ('Invalid asana project name; task not '
+                               'created.',)]
+
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_bad_status_code_on_post(self):
+        on_post_vals = ([], 400)
+        self.mock_urlopen(on_post_vals=on_post_vals)
+
+        project_name = 'Evil project'
+        tag_names = ['Evil tag']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        self.assertEqual([], self.sent_to_asana)
+        expected_error_log = [('Failed sending {"data": {"name": "hi", "tags":'
+                               ' [1, 2, 3, 44, 666], "notes": "test message", '
+                               '"followers": [], "workspace": 1120786379245, '
+                               '"projects": [1, 2, 3]}} to asana with code '
+                               '400',)]
+
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
 
 
 class SlackTest(TestBase):
