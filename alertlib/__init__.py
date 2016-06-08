@@ -119,6 +119,9 @@ _CACHED_ASANA_PROJECT_MAP = {}
 # Asana
 _CACHED_ASANA_TAG_MAP = {}
 
+# Map string Asana user email address to int Asana user id
+_CACHED_ASANA_USER_MAP = {}
+
 
 def enter_test_mode():
     """In test mode, we just log what we'd do, but don't actually do it."""
@@ -635,6 +638,42 @@ class Alert(object):
                 return True
         return False
 
+    def _get_asana_user_ids(self, user_emails, workspace):
+        """Returns the list of asana user ids for the given user emails.
+
+        If _CACHED_ASANA_USER_MAP, this looks up the user_ids for each
+        user_email via the cache and returns them, not adding a user_id
+        for any invalid user_email. If the cache is empty, this builds the
+        asana user cache. Returns [] if there is an error building the cache.
+
+        After a cache miss, this looks up all user email to user id mappings
+        from the Asana API and caches the result.
+        """
+        if not _CACHED_ASANA_USER_MAP:
+            req_url_path = ('/api/1.0/users?workspace=%s&opt_fields=id,email'
+                            % str(workspace))
+            res = self._call_asana_api(req_url_path)
+            if res is None:
+                logging.error('Failed to build Asana user cache. Fields '
+                              'involving user IDs such as followers might'
+                              'not be included in this task.')
+                return []
+
+            for user_item in res:
+                user_email = user_item['email']
+                user_id = int(user_item['id'])
+                _CACHED_ASANA_USER_MAP[user_email] = user_id
+
+        asana_user_ids = []
+        for user_email in user_emails:
+            if user_email in _CACHED_ASANA_USER_MAP:
+                asana_user_ids.append(_CACHED_ASANA_USER_MAP[user_email])
+            else:
+                logging.error('Invalid asana user email: %s; '
+                              'Fields involving this user such as follower '
+                              'will not added to task.' % user_email)
+        return asana_user_ids
+
     def _get_asana_tag_ids(self, tag_names, workspace):
         """Returns the list of tag ids for the given tag names.
 
@@ -733,7 +772,10 @@ class Alert(object):
             workspace: int id of the workspace for the task to be posted in.
                 Default 1120786379245 for khanacademy.org
 
-            followers: array of asana ids (ints) of followers for this task
+            followers: array of asana user email addresses of followers for
+                this task. Note that a user's email in Asana is not always
+                ka_username@khanacademy.org, and should be verified by looking
+                up that user in the Asana search bar.
                 Default: []
 
         The Alert message should ideally contain where the alert is coming
@@ -767,6 +809,8 @@ class Alert(object):
             logging.error('Invalid asana project name; task not created.')
             return self
 
+        asana_follower_ids = self._get_asana_user_ids(followers, workspace)
+
         asana_tag_ids = self._get_asana_tag_ids(tags, workspace)
         if asana_tag_ids is None:
             logging.error('Failed to retrieve asana tag name to tag id'
@@ -774,7 +818,7 @@ class Alert(object):
             return self
 
         post_dict = {'data': {
-                     'followers': followers,
+                     'followers': asana_follower_ids,
                      'name': task_name,
                      'notes': self.message,
                      'projects': asana_project_ids,

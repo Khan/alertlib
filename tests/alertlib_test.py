@@ -137,7 +137,8 @@ class TestBase(unittest.TestCase):
         setattr(container, var_str, new_value)
 
     def mock_urlopen(self, on_check_exists_vals=None, on_get_tags_vals=None,
-                     on_get_projects_vals=None, on_post_vals=None):
+                     on_get_projects_vals=None, on_get_user_vals=None,
+                     on_post_vals=None):
         """Remocks the urllib2 urlopen with the given response parameters.
 
         Each parameter is a tuple (read_val, status_code) if a response is
@@ -163,6 +164,7 @@ class TestBase(unittest.TestCase):
                                         {'id': 2, 'name': 'Evil project'},
                                         {'id': 3, 'name': 'Evil project'}],
                                         200)
+        default_on_get_user_vals = ([{'id': 0, 'email': 'alex@ka.org'}], 200)
         default_on_post_vals = ([], 200)
 
         on_check_exists_vals = (on_check_exists_vals or
@@ -170,6 +172,7 @@ class TestBase(unittest.TestCase):
         on_get_tags_vals = on_get_tags_vals or default_on_get_tags_vals
         on_get_projects_vals = (on_get_projects_vals or
                                 default_on_get_projects_vals)
+        on_get_user_vals = default_on_get_user_vals or on_get_user_vals
         on_post_vals = on_post_vals or default_on_post_vals
 
         def new_mock_urlopen(request, data=None):
@@ -180,6 +183,8 @@ class TestBase(unittest.TestCase):
                 (mock_read_val, mock_status_code) = on_get_tags_vals
             elif '/api/1.0/projects?workspace=' in request_url:
                 (mock_read_val, mock_status_code) = on_get_projects_vals
+            elif '/api/1.0/users?workspace=' in request_url:
+                (mock_read_val, mock_status_code) = on_get_user_vals
             elif data is not None:
                 (mock_read_val, mock_status_code) = on_post_vals
                 is_exception = isinstance(mock_read_val, Exception)
@@ -499,6 +504,64 @@ class AsanaTest(TestBase):
                           ],
                          self.sent_to_asana)
         self.assertTrue(len(expected_project_ids) > 1)
+
+    def test_valid_follower(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3', 'P1']
+        followers = ['alex@ka.org']
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.ERROR)
+        alert.send_to_asana(project=project_name, tags=tag_names,
+                            followers=followers)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(alertlib._CACHED_ASANA_TAG_MAP['P1'])
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [0],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
+    def test_invalid_follower(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3', 'P1']
+        followers = ['not_alex@ka.org']
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.ERROR)
+        alert.send_to_asana(project=project_name, tags=tag_names,
+                            followers=followers)
+
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(alertlib._CACHED_ASANA_TAG_MAP['P1'])
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+        self.assertEqual([('Invalid asana user email: not_alex@ka.org; Fields '
+                           'involving this user such as follower will not '
+                           'added to task.',)], self.sent_to_error_log)
+        self.sent_to_error_log = []
 
     def test_invalid_project(self):
         self.mock_urlopen()
