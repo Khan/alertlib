@@ -51,6 +51,7 @@ When sending to email, we try using both google appengine (for when
 you're using this within an appengine app) and sendmail.
 """
 
+import datetime
 import json
 import logging
 import re
@@ -81,22 +82,36 @@ try:
 except ImportError:
     pass
 
+stackdriver_not_allowed = None
+try:
+    import apiclient.discovery
+    import oauth2client.service_account
+except ImportError:
+    stackdriver_not_allowed = (
+            "ImportError occurred. Did you install the required libraries?"
+            " Take a look at the README for details. You may need to run"
+            " `pip install oauth2client google-api-python-client`")
+
 try:
     # KA-specific hack: ka_secrets is a superset of secrets.
     try:
         import ka_secrets as secrets
     except ImportError:
         import secrets
-    hipchat_token = secrets.hipchat_alertlib_token
-    hostedgraphite_api_key = secrets.hostedgraphite_api_key
-    slack_webhook_url = secrets.slack_alertlib_webhook_url
-    asana_api_token = secrets.asana_api_token
+    hipchat_token = getattr(secrets, 'hipchat_alertlib_token', None)
+    hostedgraphite_api_key = getattr(secrets, 'hostedgraphite_api_key', None)
+    slack_webhook_url = getattr(secrets, 'slack_alertlib_webhook_url', None)
+    asana_api_token = getattr(secrets, 'asana_api_token', None)
+    google_creds = json.loads(
+                    getattr(secrets, 'google_alertlib_service_account', None),
+                    strict=False)
 except ImportError:
     # If this fails, you don't have secrets.py set up as needed for this lib.
     hipchat_token = None
     hostedgraphite_api_key = None
     slack_webhook_url = None
     asana_api_token = None
+    google_creds = None
 
 
 # We want to convert a PagerDuty service name to an email address
@@ -108,6 +123,7 @@ _PAGERDUTY_ILLEGAL_CHARS = re.compile(r'[^A-Za-z0-9._-]')
 _GRAPHITE_SOCKET = None
 _LAST_GRAPHITE_TIME = None
 
+_GOOGLE_API_CLIENT = None
 
 _TEST_MODE = False
 
@@ -156,6 +172,17 @@ def _graphite_socket(graphite_hostport):
         _LAST_GRAPHITE_TIME = time.time()
 
     return _GRAPHITE_SOCKET
+
+
+def _get_google_apiclient():
+    """Build an http client authenticated with service account credentials."""
+    global _GOOGLE_API_CLIENT
+    if _GOOGLE_API_CLIENT is None:
+        creds = (oauth2client.service_account.ServiceAccountCredentials
+                    .from_json_keyfile_dict(google_creds))
+        _GOOGLE_API_CLIENT = apiclient.discovery.build('monitoring', 'v3',
+                    credentials=creds)
+    return _GOOGLE_API_CLIENT
 
 
 class Alert(object):
@@ -1075,6 +1102,84 @@ class Alert(object):
                 logging.error('Failed sending to graphite: %s' % why)
 
         return self
+
+    # ----------------------- STACKDRIVER ------------------------------
+
+    DEFAULT_STACKDRIVER_PROJECT = 'khan-academy'
+    DEFAULT_STACKDRIVER_VALUE = 1
+
+    def send_to_stackdriver(self,
+                            metric_name,
+                            value=DEFAULT_STACKDRIVER_VALUE,
+                            project=DEFAULT_STACKDRIVER_PROJECT):
+        """Send a new datapoint for the given metric to stackdriver.
+
+        Metric names should be a dotted name as used by stackdriver: e.g.
+        myapp.stats.num_failures.  When send_to_stackdriver() is called,
+        we add a datapoint for the given value and the current timestamp.
+        """
+        if not self._passed_rate_limit('stackdriver'):
+            return self
+
+        timeseries_data = self._get_timeseries_data(metric_name, value)
+        if stackdriver_not_allowed:
+            logging.error("Unable to send to stackdriver: %s"
+                    % stackdriver_not_allowed)
+        elif _TEST_MODE:
+            logging.info("alertlib: would send to stackdriver: "
+                         "metric_name: %s, value: %s" % (metric_name, value))
+        else:
+            self._send_datapoint_to_stackdriver(project, timeseries_data)
+        return self
+
+    def _get_custom_metric_name(self, name):
+        """Make a metric suitable for sending to Cloud Monitoring's API.
+
+        Metric names must not exceed 100 characters.
+
+        For now we limit to alphanumeric plus dot and underscore. Invalid
+        characters are converted to underscores.
+        """
+        # Don't guess at automatic truncation. Let the caller decide.
+        prefix = 'custom.googleapis.com/'
+        maxlen = 100 - len(prefix)
+        if len(name) > maxlen:
+            raise ValueError('Metric name too long: %d (limit %d): %s'
+                             % (len(name), maxlen, name))
+        return ('%s%s' % (prefix, re.sub(r'[^\w_.]', '_', name)))
+
+    def _get_timeseries_data(self, metric_name, value):
+        # Datetime formatted per RFC 3339.
+        now = datetime.datetime.utcnow().isoformat("T") + "Z"
+
+        name = self._get_custom_metric_name(metric_name)
+        timeseries_data = {
+            "metric": {
+                "type": name,
+            },
+            "metricKind": 'GAUGE',
+            "points": [
+                {
+                    "interval": {
+                        "startTime": now,
+                        "endTime": now
+                    },
+                    "value": {
+                        "doubleValue": value
+                    }
+                }
+            ]
+        }
+        return timeseries_data
+
+    def _send_datapoint_to_stackdriver(self, project, timeseries_data):
+        # This is a separate function just to make it easy to mock for tests.
+        client = _get_google_apiclient()
+
+        project_resource = "projects/%s" % project
+        request = client.projects().timeSeries().create(
+            name=project_resource, body={"timeSeries": [timeseries_data]})
+        request.execute(num_retries=9)
 
 __all__ = [
     enter_test_mode,

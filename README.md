@@ -12,6 +12,7 @@ alert to any or all of:
   * khanacademy.org email lists
   * GAE logs and/or syslog
   * Graphite/StatsD
+  * Stackdriver (also known as Google Cloud Monitoring)
 
 You must provide a decrypted `secrets.py` (from the webapp repo) to use
 these services.
@@ -49,7 +50,23 @@ alertlib.Alert("It's time for a walk!")                 \
    .send_to_pagerduty(...)                              \
    .send_to_logs(...)                                   \
    .send_to_graphite(...)
+   .send_to_stackdriver(...)
 ```
+
+### Secrets
+
+To send data to these services, you will need to provide a `secrets.py` file
+in the following format:
+
+```
+hostedgraphite_api_key = "VALUE"
+slack_alertlib_webhook_url = "VALUE"
+asana_api_token = "VALUE"
+hipchat_alertlib_token = "VALUE"
+google_alertlib_service_account = '{}'
+```
+
+You only need to include the secrets for the services you are using.
 
 ### HTML formatting (for HipChat and email)
 Alert messages may contain HTML markup if you set the `html=True` parameter on
@@ -145,3 +162,45 @@ field, which is a _mandatory_ field for Slack attachments which provides support
 for plaintext IRC/XMPP/etc clients.
 
 See https://api.slack.com/docs/attachments for more attachment details.
+
+
+### Stackdriver (Google Cloud Monitoring) Support
+
+Alertlib supports sending metrics to stackdriver for graphing and monitoring. As
+an example: `alertlib.Alert('error').send_to_stackdriver('metric.name', 10)`
+would send a datapoint of 10 to the `metric.name` metric.
+
+Before using this feature, please ensure that the `oauth2client` and
+`google-api-python-client` packages are installed before use. These packages are
+only required for users that call `send_to_stackdriver`. To install the
+latest versions of these packages tested with alertlib run:
+
+`pip install oauth2client==2.1.0 google-api-python-client==1.5.1`
+
+Later versions of these packages will likely work as well.
+
+To authenticate with google,
+[follow this doc](https://developers.google.com/identity/protocols/OAuth2ServiceAccount)
+to create a Service Account and authorize it appropriately. Include the JSON for
+the account in `secrets.py` as a multiline string, assigned to
+`google_alertlib_service_account`, so that `secrets.py` looks like:
+
+```
+google_alertlib_service_account = '''
+{
+  "type": "service_account",
+  "project_id": "PROJECT_ID",
+  "private_key_id": "PROJECT_KEY_ID",
+  "private_key": "-----BEGIN PRIVATE KEY-----
+....
+-----END PRIVATE KEY-----
+",
+  "client_email": "EMAIL",
+  "client_id": "ID",
+  "auth_uri": "AUTH_URI",
+  "token_uri": "TOKEN_URI",
+  "auth_provider_x509_cert_url": "CERT_URL",
+  "client_x509_cert_url": "CERT_URL"
+}
+'''
+```

@@ -20,6 +20,7 @@ fake_secrets.hipchat_alertlib_token = '<hipchat token>'
 fake_secrets.hostedgraphite_api_key = '<hostedgraphite API key>'
 fake_secrets.slack_alertlib_webhook_url = '<slack webhook url>'
 fake_secrets.asana_api_token = '<asana api token>'
+fake_secrets.google_alertlib_service_account = "{}"
 sys.modules['secrets'] = fake_secrets
 
 # And we want the google tests to work even without appengine installed.
@@ -74,6 +75,7 @@ class TestBase(unittest.TestCase):
         self.sent_to_error_log = []
         self.sent_to_syslog = []
         self.sent_to_graphite = []
+        self.sent_to_stackdriver = []
 
         class FakeSMTP(object):
             """We need to fake out the sendmail() and quit() methods."""
@@ -118,6 +120,9 @@ class TestBase(unittest.TestCase):
 
         self.mock(alertlib, '_graphite_socket',
                   lambda hostname: FakeGraphiteSocket)
+
+        self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
+                  lambda s, proj, data: self.sent_to_stackdriver.append(data))
 
     def tearDown(self):
         # None of the tests should have caused any errors unless specifcally
@@ -1460,6 +1465,47 @@ class GraphiteTest(TestBase):
                          self.sent_to_graphite)
 
 
+class StackdriverTest(TestBase):
+    def setUp(self):
+        super(StackdriverTest, self).setUp()
+        self.alert = alertlib.Alert('test message')
+
+    def test_value(self):
+        self.alert.send_to_stackdriver('stats.test_message', 4)
+
+        sent_data_point = self._get_sent_datapoint()
+        self.assertEqual({'doubleValue': 4}, sent_data_point['value'])
+
+    def test_default_value(self):
+        self.alert.send_to_stackdriver('stats.test_message')
+
+        sent_data_point = self._get_sent_datapoint()
+        self.assertEqual({'doubleValue': 1}, sent_data_point['value'])
+
+    def test_metric_name(self):
+        self.alert.send_to_stackdriver('stats.Bad-M#tric%name')
+        sent_data = self._get_sent_timeseries_data()
+        sent_metric_name = sent_data['metric']['type']
+        self.assertEqual('custom.googleapis.com/stats.Bad_M_tric_name',
+                         sent_metric_name)
+
+    def _get_sent_timeseries_data(self):
+        self.assertEqual(1, len(self.sent_to_stackdriver))
+        sent_data = self.sent_to_stackdriver[0]
+
+        # Ensure the timeseries has the keys we expect
+        expected_keys = {'metric', 'metricKind', 'points'}
+        self.assertTrue(expected_keys.issubset(set(sent_data.keys())))
+
+        return sent_data
+
+    def _get_sent_datapoint(self):
+        sent_points = self._get_sent_timeseries_data()['points']
+        self.assertEqual(1, len(sent_points))
+
+        return sent_points[0]
+
+
 class RateLimitingTest(TestBase):
     @staticmethod
     @contextlib.contextmanager
@@ -1515,11 +1561,13 @@ class RateLimitingTest(TestBase):
         alert = alertlib.Alert('test message', rate_limit=60)
         for _ in xrange(100):
             alert.send_to_graphite('stats.test_message', 4) \
-                 .send_to_hipchat('1s and 0s')
+                 .send_to_hipchat('1s and 0s') \
+                 .send_to_stackdriver('stats.test_message')
             alert.send_to_logs()
         self.assertEqual(1, len(self.sent_to_graphite))
         self.assertEqual(1, len(self.sent_to_hipchat))
         self.assertEqual(1, len(self.sent_to_syslog))
+        self.assertEqual(1, len(self.sent_to_stackdriver))
 
 
 class IntegrationTest(TestBase):
@@ -1570,6 +1618,8 @@ class IntegrationTest(TestBase):
         self.assertEqual(['<hostedgraphite API key>.stats.alerted 1\n'],
                          self.sent_to_graphite)
 
+        self.assertEqual([], self.sent_to_stackdriver)
+
     def test_test_mode(self):
         alertlib.enter_test_mode()
         try:
@@ -1578,7 +1628,8 @@ class IntegrationTest(TestBase):
                 .send_to_email('ka-admin') \
                 .send_to_pagerduty('oncall') \
                 .send_to_logs() \
-                .send_to_graphite('stats.alerted')
+                .send_to_graphite('stats.alerted') \
+                .send_to_stackdriver('stats.test_mode')
         finally:
             alertlib.exit_test_mode()
 
@@ -1588,6 +1639,7 @@ class IntegrationTest(TestBase):
         self.assertEqual([], self.sent_to_sendmail)
         self.assertEqual([], self.sent_to_syslog)
         self.assertEqual([], self.sent_to_graphite)
+        self.assertEqual([], self.sent_to_stackdriver)
 
         self.assertEqual(
             [('alertlib: would send to hipchat room 1s and 0s: '
@@ -1599,7 +1651,9 @@ class IntegrationTest(TestBase):
              ("alertlib: would send pagerduty email to "
               "['oncall@khan-academy.pagerduty.com'] "
               "(subject test message) test message",),
-             ('alertlib: would send to graphite: stats.alerted 1',)
+             ('alertlib: would send to graphite: stats.alerted 1',),
+             ("alertlib: would send to stackdriver: "
+              "metric_name: stats.test_mode, value: 1",)
              ],
             self.sent_to_info_log)
 

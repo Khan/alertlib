@@ -66,8 +66,13 @@ def setup_parser():
     parser.add_argument('--graphite', default=[], action=_MakeList,
                         help=('Send to graphite.  Argument is a comma-'
                               'separted list of statistics to update. '
-                              'May specify --graphite_val and '
+                              'May specify --graphite_value and '
                               '--graphite_host.'))
+
+    parser.add_argument('--stackdriver', default=[], action=_MakeList,
+                        help=('Send to Stackdriver.  Argument is a comma-'
+                              'separted list of statistics to update. '
+                              'May specify --stackdriver_value'))
 
     parser.add_argument('--summary', default=None,
                         help=('Summary used as subject lines for emails, etc. '
@@ -119,6 +124,18 @@ def setup_parser():
                         help=('host:port to send graphite data to '
                               '(default %(default)s)'))
 
+    parser.add_argument('--stackdriver_value',
+                        default=alertlib.Alert.DEFAULT_STACKDRIVER_VALUE,
+                        type=float,
+                        help=('Value to send to stackdriver for each of the '
+                              'stackdriver statistics specified '
+                              '(default %(default)s)'))
+
+    parser.add_argument('--stackdriver_project',
+                        default=alertlib.Alert.DEFAULT_STACKDRIVER_PROJECT,
+                        help=('Stackdriver project to send datapoints to '
+                              '(default %(default)s)'))
+
     parser.add_argument('-n', '--dry-run', action='store_true',
                         help=("Just log what we would do, but don't do it"))
 
@@ -148,6 +165,10 @@ def alert(message, args):
     for statistic in args.graphite:
         a.send_to_graphite(statistic, args.graphite_value,
                            args.graphite_host)
+
+    for statistic in args.stackdriver:
+        a.send_to_stackdriver(statistic, args.stackdriver_value,
+                args.stackdriver_project)
 
 
 def main(argv):
