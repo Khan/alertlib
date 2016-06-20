@@ -175,9 +175,10 @@ Before using this feature, please ensure that the `oauth2client` and
 only required for users that call `send_to_stackdriver`. To install the
 latest versions of these packages tested with alertlib run:
 
-`pip install oauth2client==2.1.0 google-api-python-client==1.5.1`
+`pip install oauth2client==1.2 google-api-python-client==1.2`
 
-Later versions of these packages will likely work as well.
+Note that these are older versions of these packages, which we are using here
+because they are the versions currently used by webapp.
 
 To authenticate with google,
 [follow this doc](https://developers.google.com/identity/protocols/OAuth2ServiceAccount)

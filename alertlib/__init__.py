@@ -53,6 +53,8 @@ you're using this within an appengine app) and sendmail.
 
 import datetime
 import json
+import httplib
+import httplib2
 import logging
 import re
 import socket
@@ -85,7 +87,7 @@ except ImportError:
 stackdriver_not_allowed = None
 try:
     import apiclient.discovery
-    import oauth2client.service_account
+    import oauth2client.client
 except ImportError:
     stackdriver_not_allowed = (
             "ImportError occurred. Did you install the required libraries?"
@@ -178,11 +180,42 @@ def _get_google_apiclient():
     """Build an http client authenticated with service account credentials."""
     global _GOOGLE_API_CLIENT
     if _GOOGLE_API_CLIENT is None:
-        creds = (oauth2client.service_account.ServiceAccountCredentials
-                    .from_json_keyfile_dict(google_creds))
-        _GOOGLE_API_CLIENT = apiclient.discovery.build('monitoring', 'v3',
-                    credentials=creds)
+        creds = oauth2client.client.SignedJwtAssertionCredentials(
+            google_creds['client_email'], google_creds['private_key'],
+            'https://www.googleapis.com/auth/monitoring')
+        http = creds.authorize(httplib2.Http())
+        _GOOGLE_API_CLIENT = apiclient.discovery.build(
+                serviceName='monitoring',
+                version='v3', http=http)
     return _GOOGLE_API_CLIENT
+
+
+def _call_with_retries(fn, num_retries=9, wait_time=0.5):
+    """Run fn (a network command) up to 9 times for non-fatal errors."""
+    for i in xrange(num_retries + 1):     # the last time, we re-raise
+        try:
+            return fn()
+        except (socket.error, httplib.HTTPException,
+                oauth2client.client.Error):
+            if i == num_retries:
+                raise
+            pass
+        except apiclient.errors.HttpError as e:
+            if i == num_retries:
+                raise
+            code = int(e.resp['status'])
+            if code == 403 or code >= 500:     # 403: rate-limiting probably
+                pass
+            elif (code == 400 and
+                      'Timeseries data must be more recent' in str(e)):
+                # This error just means we uploaded the same data
+                # twice by accident (probably because the first time
+                # the connection to google died before we got their ACK).
+                # We just pretend the call magically succeeded.
+                return
+            else:
+                raise
+        time.sleep(wait_time)     # wait a bit before the next request
 
 
 class Alert(object):
@@ -1182,7 +1215,7 @@ class Alert(object):
         project_resource = "projects/%s" % project
         request = client.projects().timeSeries().create(
             name=project_resource, body={"timeSeries": [timeseries_data]})
-        request.execute(num_retries=9)
+        _call_with_retries(request.execute)
 
 __all__ = [
     enter_test_mode,

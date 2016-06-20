@@ -5,12 +5,18 @@
 import contextlib
 import json
 import logging
+import httplib
+import socket
 import sys
 import syslog
 import time
 import types
 import unittest
 import urllib2
+
+import apiclient.errors
+import oauth2client
+import mock
 
 # Before we can import alertlib, we need to define a module 'secrets'
 # so the alertlib import can succeed
@@ -1526,6 +1532,104 @@ class StackdriverTest(TestBase):
         self.assertEqual(1, len(sent_points))
 
         return sent_points[0]
+
+
+class CallWithRetriesTest(TestBase):
+
+    class MockHttpResponse:
+        def __init__(self, status_code, reason=""):
+            self.status_code = status_code
+            self.reason = reason
+
+        def __getitem__(self, value):
+            if value == 'status':
+                return self.status_code
+
+        def status(self):
+            return self.status_code
+
+        def _get_reason(self):
+            return self.reason
+
+    def test_expected_errors(self):
+        error_types = [socket.error, httplib.HTTPException,
+                oauth2client.client.Error]
+
+        for error_type in error_types:
+            test_func = mock.Mock(side_effect=error_type('error'))
+
+            # On the N+1 try, the function re-raises
+            with self.assertRaises(error_type):
+                alertlib._call_with_retries(test_func, wait_time=0)
+
+            self.assertEqual(test_func.call_count, 10)
+
+    def test_unexpected_error(self):
+        test_func = mock.Mock(side_effect=RuntimeError('error'))
+
+        with self.assertRaises(RuntimeError):
+            alertlib._call_with_retries(test_func, wait_time=0)
+
+        # We should not retry when unexpected errors are raised
+        self.assertEqual(test_func.call_count, 1)
+
+    def test_expected_apiclient_errors(self):
+        expected_error_status_codes = [403, 503]
+
+        for code in expected_error_status_codes:
+            test_func = self._http_error_fn(code)
+
+            with self.assertRaises(apiclient.errors.HttpError):
+                alertlib._call_with_retries(test_func, wait_time=0)
+
+            self.assertEqual(test_func.call_count, 10)
+
+    def test_unexpected_apiclient_errors(self):
+        test_func = self._http_error_fn(401)
+
+        with self.assertRaises(apiclient.errors.HttpError):
+            alertlib._call_with_retries(test_func, wait_time=0)
+
+        # We should not retry when unexpected errors are raised
+        self.assertEqual(test_func.call_count, 1)
+
+    def test_expected_400_timeseries_response(self):
+        error_msg = 'Timeseries data must be more recent'
+        test_func = self._http_error_fn(400, error_msg)
+
+        # We do not expect an error to be raised here
+        alertlib._call_with_retries(test_func, wait_time=0)
+        self.assertEqual(test_func.call_count, 1)
+
+    def test_unexpected_400_response(self):
+        # If we have any other reason, we raise and do not retry
+        test_func = self._http_error_fn(400, 'Some other reason')
+
+        with self.assertRaises(apiclient.errors.HttpError):
+            alertlib._call_with_retries(test_func, wait_time=0)
+
+        self.assertEqual(test_func.call_count, 1)
+
+    def test_non_default_num_retries(self):
+        test_func = mock.Mock(side_effect=socket.error('error'))
+
+        with self.assertRaises(socket.error):
+            alertlib._call_with_retries(test_func, num_retries=20, wait_time=0)
+
+        self.assertEqual(test_func.call_count, 21)
+
+    def test_eventual_success(self):
+        side_effects = [socket.error('error'), socket.error('error'), 0]
+        test_func = mock.Mock(side_effect=side_effects)
+
+        alertlib._call_with_retries(test_func, wait_time=0)
+        self.assertEqual(test_func.call_count, 3)
+
+    def _http_error_fn(self, status_code, reason=""):
+        response = CallWithRetriesTest.MockHttpResponse(status_code, reason)
+        error = apiclient.errors.HttpError(response, "content not used")
+
+        return mock.Mock(side_effect=error)
 
 
 class RateLimitingTest(TestBase):
