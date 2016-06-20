@@ -366,6 +366,28 @@ class AsanaTest(TestBase):
                           ],
                          self.sent_to_asana)
 
+    def test_name_endswith_colon(self):
+        self.mock_urlopen()
+
+        project_name = 'Engineering support'
+        tag_names = ['P3']
+        alert = alertlib.Alert('test message', summary='hi:')
+        alert.send_to_asana(project=project_name, tags=tag_names)
+        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
+        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(
+            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+        self.assertEqual([{'data':
+                          {'followers': [],
+                           'name': 'hi',
+                           'notes': 'test message',
+                           'projects': expected_project_ids,
+                           'tags': expected_tag_ids,
+                           'workspace': 1120786379245}
+                           }
+                          ],
+                         self.sent_to_asana)
+
     def test_severity_no_tags(self):
         self.mock_urlopen()
 

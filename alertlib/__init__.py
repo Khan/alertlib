@@ -830,6 +830,9 @@ class Alert(object):
         tags.append('Auto generated')
 
         task_name = self.summary or ('New Auto generated Asana task')
+        # Task names ending with ':' become a section heading; so, remove it
+        if task_name.endswith(':'):
+            task_name = task_name[:-1]
 
         asana_project_ids = self._get_asana_project_ids(project, workspace)
         if not asana_project_ids:
