@@ -1218,7 +1218,7 @@ class Alert(object):
         _call_with_retries(request.execute)
 
 __all__ = [
-    enter_test_mode,
-    exit_test_mode,
-    Alert
+    'enter_test_mode',
+    'exit_test_mode',
+    'Alert'
 ]
