@@ -104,9 +104,10 @@ try:
     hostedgraphite_api_key = getattr(secrets, 'hostedgraphite_api_key', None)
     slack_webhook_url = getattr(secrets, 'slack_alertlib_webhook_url', None)
     asana_api_token = getattr(secrets, 'asana_api_token', None)
-    google_creds = json.loads(
-                    getattr(secrets, 'google_alertlib_service_account', "{}"),
-                    strict=False)
+    google_creds_json = getattr(secrets, 'google_alertlib_service_account',
+                                None)
+    google_creds_json = google_creds_json or "{}"
+    google_creds = json.loads(google_creds_json, strict=False)
 except ImportError:
     # If this fails, you don't have secrets.py set up as needed for this lib.
     hipchat_token = None
