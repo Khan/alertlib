@@ -105,7 +105,7 @@ try:
     slack_webhook_url = getattr(secrets, 'slack_alertlib_webhook_url', None)
     asana_api_token = getattr(secrets, 'asana_api_token', None)
     google_creds = json.loads(
-                    getattr(secrets, 'google_alertlib_service_account', None),
+                    getattr(secrets, 'google_alertlib_service_account', "{}"),
                     strict=False)
 except ImportError:
     # If this fails, you don't have secrets.py set up as needed for this lib.
