@@ -54,7 +54,6 @@ you're using this within an appengine app) and sendmail.
 import datetime
 import json
 import httplib
-import httplib2
 import logging
 import re
 import socket
@@ -86,13 +85,14 @@ except ImportError:
 
 stackdriver_not_allowed = None
 try:
+    import httplib2
     import apiclient.discovery
     import oauth2client.client
 except ImportError:
     stackdriver_not_allowed = (
             "ImportError occurred. Did you install the required libraries?"
             " Take a look at the README for details. You may need to run"
-            " `pip install oauth2client google-api-python-client`")
+            " `pip install httplib2 oauth2client google-api-python-client`")
 
 try:
     # KA-specific hack: ka_secrets is a superset of secrets.

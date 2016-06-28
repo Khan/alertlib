@@ -170,12 +170,13 @@ Alertlib supports sending metrics to stackdriver for graphing and monitoring. As
 an example: `alertlib.Alert('error').send_to_stackdriver('metric.name', 10)`
 would send a datapoint of 10 to the `metric.name` metric.
 
-Before using this feature, please ensure that the `oauth2client` and
-`google-api-python-client` packages are installed before use. These packages are
-only required for users that call `send_to_stackdriver`. To install the
-latest versions of these packages tested with alertlib run:
+Before using this feature, please ensure that the `httplib2`,
+`oauth2client`, and `google-api-python-client` packages are installed
+before use. These packages are only required for users that call
+`send_to_stackdriver`. To install the latest versions of these
+packages that are tested with alertlib, run:
 
-`pip install oauth2client==1.2 google-api-python-client==1.2`
+`pip install httplib2=0.9.2 oauth2client==1.2 google-api-python-client==1.2`
 
 Note that these are older versions of these packages, which we are using here
 because they are the versions currently used by webapp.
