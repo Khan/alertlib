@@ -87,6 +87,7 @@ def setup_parser():
                               'how we alert (default: %(default)s)'))
     parser.add_argument('--html', action='store_true', default=False,
                         help=('Indicate the input should be treated as html'))
+
     parser.add_argument('--chat-sender', default=None,
                         help=('Who we say sent this chat message. '
                               'In HipChat, defaults to AlertiGator. '
@@ -106,6 +107,7 @@ def setup_parser():
                               '(default depends on severity)'))
     parser.add_argument('--notify', action='store_true', default=None,
                         help=('Cause a beep when sending to hipchat'))
+
     parser.add_argument('--cc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
@@ -115,6 +117,7 @@ def setup_parser():
     parser.add_argument('--bcc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
+
     parser.add_argument('--graphite_value', default=1, type=float,
                         help=('Value to send to graphite for each of the '
                               'graphite statistics specified '
@@ -130,7 +133,12 @@ def setup_parser():
                         help=('Value to send to stackdriver for each of the '
                               'stackdriver statistics specified '
                               '(default %(default)s)'))
-
+    parser.add_argument('--stackdriver_kind',
+                        default=alertlib.Alert.DEFAULT_STACKDRIVER_KIND,
+                        choices=['GAUGE', 'CUMULATIVE', 'DELTA'],
+                        help=('Kind of statistic (GAUGE, CUMULATIVE, etc) '
+                              'for the stackdriver statistics specified '
+                              '(default %(default)s)'))
     parser.add_argument('--stackdriver_project',
                         default=alertlib.Alert.DEFAULT_STACKDRIVER_PROJECT,
                         help=('Stackdriver project to send datapoints to '
@@ -168,7 +176,8 @@ def alert(message, args):
 
     for statistic in args.stackdriver:
         a.send_to_stackdriver(statistic, args.stackdriver_value,
-                args.stackdriver_project)
+                              args.stackdriver_kind,
+                              args.stackdriver_project)
 
 
 def main(argv):

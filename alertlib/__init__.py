@@ -414,6 +414,7 @@ class Alert(object):
         return self      # so we can chain the method calls
 
     # ----------------- SLACK ---------------------------------------------
+
     # 'good'=green, 'warning'=yellow, 'danger'=red, or use hex colors
     _LOG_PRIORITY_TO_SLACK_COLOR = {
         logging.DEBUG: "",  # blank = uses default color which is light grayish
@@ -621,6 +622,7 @@ class Alert(object):
         return self      # so we can chain the method calls
 
     # ----------------- ASANA --------------------------------------------
+
     _LOG_PRIORITY_TO_ASANA_TAG = {
         logging.INFO: 'P4',
         logging.WARNING: 'P3',
@@ -1144,10 +1146,12 @@ class Alert(object):
 
     DEFAULT_STACKDRIVER_PROJECT = 'khan-academy'
     DEFAULT_STACKDRIVER_VALUE = 1
+    DEFAULT_STACKDRIVER_KIND = 'GAUGE'   # could also be CUMULATIVE
 
     def send_to_stackdriver(self,
                             metric_name,
                             value=DEFAULT_STACKDRIVER_VALUE,
+                            kind=DEFAULT_STACKDRIVER_KIND,
                             project=DEFAULT_STACKDRIVER_PROJECT):
         """Send a new datapoint for the given metric to stackdriver.
 
@@ -1158,7 +1162,7 @@ class Alert(object):
         if not self._passed_rate_limit('stackdriver'):
             return self
 
-        timeseries_data = self._get_timeseries_data(metric_name, value)
+        timeseries_data = self._get_timeseries_data(metric_name, value, kind)
         if stackdriver_not_allowed:
             logging.error("Unable to send to stackdriver: %s"
                     % stackdriver_not_allowed)
@@ -1185,7 +1189,7 @@ class Alert(object):
                              % (len(name), maxlen, name))
         return ('%s%s' % (prefix, re.sub(r'[^\w_.]', '_', name)))
 
-    def _get_timeseries_data(self, metric_name, value):
+    def _get_timeseries_data(self, metric_name, value, kind):
         # Datetime formatted per RFC 3339.
         now = datetime.datetime.utcnow().isoformat("T") + "Z"
 
@@ -1194,7 +1198,7 @@ class Alert(object):
             "metric": {
                 "type": name,
             },
-            "metricKind": 'GAUGE',
+            "metricKind": kind,
             "points": [
                 {
                     "interval": {
@@ -1217,6 +1221,7 @@ class Alert(object):
         request = client.projects().timeSeries().create(
             name=project_resource, body={"timeSeries": [timeseries_data]})
         _call_with_retries(request.execute)
+
 
 __all__ = [
     'enter_test_mode',
