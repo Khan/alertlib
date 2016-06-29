@@ -135,8 +135,8 @@ def setup_parser():
                               '(default %(default)s)'))
     parser.add_argument('--stackdriver_kind',
                         default=alertlib.Alert.DEFAULT_STACKDRIVER_KIND,
-                        choices=['GAUGE', 'CUMULATIVE', 'DELTA'],
-                        help=('Kind of statistic (GAUGE, CUMULATIVE, etc) '
+                        choices=['GAUGE', 'CUMULATIVE'],
+                        help=('Kind of statistic (GAUGE or CUMULATIVE) '
                               'for the stackdriver statistics specified '
                               '(default %(default)s)'))
     parser.add_argument('--stackdriver_project',
