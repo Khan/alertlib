@@ -1145,12 +1145,10 @@ class Alert(object):
 
     DEFAULT_STACKDRIVER_PROJECT = 'khan-academy'
     DEFAULT_STACKDRIVER_VALUE = 1
-    DEFAULT_STACKDRIVER_KIND = 'GAUGE'   # could also be CUMULATIVE
 
     def send_to_stackdriver(self,
                             metric_name,
                             value=DEFAULT_STACKDRIVER_VALUE,
-                            kind=DEFAULT_STACKDRIVER_KIND,
                             metric_labels={},
                             monitored_resource_type=None,
                             monitored_resource_labels={},
@@ -1194,7 +1192,7 @@ class Alert(object):
         timeseries_data = self._get_timeseries_data(
             metric_name, metric_labels,
             monitored_resource_type, monitored_resource_labels,
-            value, kind, when)
+            value, when)
         if stackdriver_not_allowed:
             logging.error("Unable to send to stackdriver: %s"
                     % stackdriver_not_allowed)
@@ -1225,7 +1223,7 @@ class Alert(object):
     def _get_timeseries_data(self, metric_name, metric_labels,
                              monitored_resource_type,
                              monitored_resource_labels,
-                             value, kind, when):
+                             value, when):
         # Datetime formatted per RFC 3339.
         if when is None:
             when = time.time()
@@ -1236,7 +1234,6 @@ class Alert(object):
             "metric": {
                 "type": name,
             },
-            "metricKind": kind,
             "points": [
                 {
                     "interval": {

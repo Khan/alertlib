@@ -135,12 +135,6 @@ def setup_parser():
                         help=('Value to send to stackdriver for each of the '
                               'stackdriver statistics specified '
                               '(default %(default)s)'))
-    parser.add_argument('--stackdriver_kind',
-                        default=alertlib.Alert.DEFAULT_STACKDRIVER_KIND,
-                        choices=['GAUGE', 'CUMULATIVE'],
-                        help=('Kind of statistic (GAUGE or CUMULATIVE) '
-                              'for the stackdriver statistics specified '
-                              '(default %(default)s)'))
     parser.add_argument('--stackdriver_project',
                         default=alertlib.Alert.DEFAULT_STACKDRIVER_PROJECT,
                         help=('Stackdriver project to send datapoints to '
@@ -181,7 +175,6 @@ def alert(message, args):
         metric_name = statistic_parts[0]
         metric_labels = dict(part.split('=') for part in statistic_parts[1:])
         a.send_to_stackdriver(metric_name, args.stackdriver_value,
-                              kind=args.stackdriver_kind,
                               metric_labels=metric_labels,
                               project=args.stackdriver_project,
                               ignore_errors=False)

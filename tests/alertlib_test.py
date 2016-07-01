@@ -1591,7 +1591,7 @@ class StackdriverTest(TestBase):
         sent_data = self.sent_to_stackdriver[0]
 
         # Ensure the timeseries has the keys we expect
-        expected_keys = {'metric', 'metricKind', 'points'}
+        expected_keys = {'metric', 'points'}
         self.assertTrue(expected_keys.issubset(set(sent_data.keys())))
 
         return sent_data
