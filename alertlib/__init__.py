@@ -191,7 +191,7 @@ def _get_google_apiclient():
     return _GOOGLE_API_CLIENT
 
 
-def _call_with_retries(fn, num_retries=9, wait_time=0.5):
+def _call_stackdriver_with_retries(fn, num_retries=9, wait_time=0.5):
     """Run fn (a network command) up to 9 times for non-fatal errors."""
     for i in xrange(num_retries + 1):     # the last time, we re-raise
         try:
@@ -1152,13 +1152,32 @@ class Alert(object):
                             metric_name,
                             value=DEFAULT_STACKDRIVER_VALUE,
                             kind=DEFAULT_STACKDRIVER_KIND,
+                            metric_labels={},
+                            monitored_resource_type=None,
+                            monitored_resource_labels={},
                             project=DEFAULT_STACKDRIVER_PROJECT,
                             ignore_errors=True):
         """Send a new datapoint for the given metric to stackdriver.
 
-        Metric names should be a dotted name as used by stackdriver: e.g.
-        myapp.stats.num_failures.  When send_to_stackdriver() is called,
-        we add a datapoint for the given value and the current timestamp.
+        Metric names should be a dotted name as used by stackdriver:
+        e.g.  myapp.stats.num_failures.  Metric labels should be a
+        list of label-name/label-value pairs, e.g. {'lang': 'en',
+        'country': 'br'}.  To understand the difference between metric
+        names and metric labels, see:
+           https://cloud.google.com/monitoring/api/v3/metrics#concepts
+        One way to think of it is that when exploring metrics in
+        stackdriver, each metric-name will correspond to a graph, and
+        each label-value (e.g. ['en, 'br']) will be a line in the graph.
+
+        When send_to_stackdriver() is called, we add a datapoint for
+        the given metric name+labels, with the given value and the
+        current timestamp.
+
+        Stackdriver also has a concept of monitored-resource names and
+        labels, which you can use if they apply to you, but which you
+        will normally leave at the default.  See
+           https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.monitoredResourceDescriptors/list#try-it
+        to see all the monitored-resources available.
 
         If ignore_errors is True (the default), we silently fail if we
         can't send to stackdriver for some reason.  This mimics the
@@ -1169,7 +1188,9 @@ class Alert(object):
         if not self._passed_rate_limit('stackdriver'):
             return self
 
-        timeseries_data = self._get_timeseries_data(metric_name, value, kind)
+        timeseries_data = self._get_timeseries_data(
+            metric_name, metric_labels,
+            monitored_resource_type, monitored_resource_labels, value, kind)
         if stackdriver_not_allowed:
             logging.error("Unable to send to stackdriver: %s"
                     % stackdriver_not_allowed)
@@ -1179,8 +1200,12 @@ class Alert(object):
         else:
             try:
                 self._send_datapoint_to_stackdriver(project, timeseries_data)
-            except Exception:
+            except Exception as e:
                 if not ignore_errors:
+                    # cloud-monitoring API seems to put more content
+                    # in 'content'.
+                    if hasattr(e, 'content'):
+                        logging.error('CLOUD-MONITORING ERROR: %s' % e.content)
                     raise
         return self
 
@@ -1200,7 +1225,10 @@ class Alert(object):
                              % (len(name), maxlen, name))
         return ('%s%s' % (prefix, re.sub(r'[^\w_.]', '_', name)))
 
-    def _get_timeseries_data(self, metric_name, value, kind):
+    def _get_timeseries_data(self, metric_name, metric_labels,
+                             monitored_resource_type,
+                             monitored_resource_labels,
+                             value, kind):
         # Datetime formatted per RFC 3339.
         now = datetime.datetime.utcnow().isoformat("T") + "Z"
 
@@ -1222,6 +1250,11 @@ class Alert(object):
                 }
             ]
         }
+        if metric_labels:
+            timeseries_data["metric"]["labels"] = metric_labels
+        if monitored_resource_type:
+            timeseries_data["resource"] = {"type": monitored_resource_type,
+                                           "labels": monitored_resource_labels}
         return timeseries_data
 
     def _send_datapoint_to_stackdriver(self, project, timeseries_data):
@@ -1229,9 +1262,14 @@ class Alert(object):
         client = _get_google_apiclient()
 
         project_resource = "projects/%s" % project
+
+        # TODO(csilvers): manually create the metricDescriptor if necessary.
+        # Cache so we don't have to create a metric many times.  e.g.
+        #    client.projects().metricDescriptors().create(name=project_resource, body={"name": "projects/khan-academy/metricDescriptors/custom.googleapis.com/logs.500", "type": "custom.googleapis.com/logs.500", "metricKind": "GAUGE", "valueType": "DOUBLE", "labels": [{"key": "module"}]})   # @Nolint(long line)
+
         request = client.projects().timeSeries().create(
             name=project_resource, body={"timeSeries": [timeseries_data]})
-        _call_with_retries(request.execute)
+        _call_stackdriver_with_retries(request.execute)
 
 
 __all__ = [

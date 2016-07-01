@@ -71,7 +71,9 @@ def setup_parser():
 
     parser.add_argument('--stackdriver', default=[], action=_MakeList,
                         help=('Send to Stackdriver.  Argument is a comma-'
-                              'separted list of statistics to update. '
+                              'separted list of metrics to update, with '
+                              'metric-label-values separated by pipes like so:'
+                              ' `logs.500|module=i18n`. '
                               'May specify --stackdriver_value'))
 
     parser.add_argument('--summary', default=None,
@@ -175,9 +177,13 @@ def alert(message, args):
                            args.graphite_host)
 
     for statistic in args.stackdriver:
-        a.send_to_stackdriver(statistic, args.stackdriver_value,
-                              args.stackdriver_kind,
-                              args.stackdriver_project,
+        statistic_parts = statistic.split('|')
+        metric_name = statistic_parts[0]
+        metric_labels = dict(part.split('=') for part in statistic_parts[1:])
+        a.send_to_stackdriver(metric_name, args.stackdriver_value,
+                              kind=args.stackdriver_kind,
+                              metric_labels=metric_labels,
+                              project=args.stackdriver_project,
                               ignore_errors=False)
 
 

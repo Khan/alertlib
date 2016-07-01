@@ -1517,6 +1517,39 @@ class StackdriverTest(TestBase):
         self.assertEqual('custom.googleapis.com/stats.Bad_M_tric_name',
                          sent_metric_name)
 
+    def test_default_labels(self):
+        self.alert.send_to_stackdriver('stats.test_message')
+        sent_data = self._get_sent_timeseries_data()
+        sent_metric = sent_data['metric']
+        self.assertEqual({'type': 'custom.googleapis.com/stats.test_message'},
+                         sent_metric)
+        self.assertNotIn('resource', sent_data)
+
+    def test_explicit_labels(self):
+        self.alert.send_to_stackdriver('stats.test_message',
+                                       metric_labels={'foo': 'bar', 'baz': 4})
+        sent_data = self._get_sent_timeseries_data()
+        sent_metric = sent_data['metric']
+        expected = {
+            'type': 'custom.googleapis.com/stats.test_message',
+            'labels': {'foo': 'bar', 'baz': 4}
+        }
+        self.assertEqual(sent_metric, expected)
+        self.assertNotIn('resource', sent_data)
+
+    def test_monitored_resource_type(self):
+        self.alert.send_to_stackdriver(
+            'stats.test_message',
+            monitored_resource_type='datastore_request',
+            monitored_resource_labels={'module_id': 'i18n', 'version_id': 4})
+        sent_data = self._get_sent_timeseries_data()
+        sent_metric = sent_data['resource']
+        expected = {
+            'type': 'datastore_request',
+            'labels': {'module_id': 'i18n', 'version_id': 4}
+        }
+        self.assertEqual(sent_metric, expected)
+
     def test_ignore_errors(self):
         self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
                   lambda s, proj, data: 1 / 0)
@@ -1574,7 +1607,7 @@ class CallWithRetriesTest(TestBase):
 
             # On the N+1 try, the function re-raises
             with self.assertRaises(error_type):
-                alertlib._call_with_retries(test_func, wait_time=0)
+                alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
 
             self.assertEqual(test_func.call_count, 10)
 
@@ -1582,7 +1615,7 @@ class CallWithRetriesTest(TestBase):
         test_func = mock.Mock(side_effect=RuntimeError('error'))
 
         with self.assertRaises(RuntimeError):
-            alertlib._call_with_retries(test_func, wait_time=0)
+            alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
 
         # We should not retry when unexpected errors are raised
         self.assertEqual(test_func.call_count, 1)
@@ -1594,7 +1627,7 @@ class CallWithRetriesTest(TestBase):
             test_func = self._http_error_fn(code)
 
             with self.assertRaises(apiclient.errors.HttpError):
-                alertlib._call_with_retries(test_func, wait_time=0)
+                alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
 
             self.assertEqual(test_func.call_count, 10)
 
@@ -1602,7 +1635,7 @@ class CallWithRetriesTest(TestBase):
         test_func = self._http_error_fn(401)
 
         with self.assertRaises(apiclient.errors.HttpError):
-            alertlib._call_with_retries(test_func, wait_time=0)
+            alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
 
         # We should not retry when unexpected errors are raised
         self.assertEqual(test_func.call_count, 1)
@@ -1612,7 +1645,7 @@ class CallWithRetriesTest(TestBase):
         test_func = self._http_error_fn(400, error_msg)
 
         # We do not expect an error to be raised here
-        alertlib._call_with_retries(test_func, wait_time=0)
+        alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
         self.assertEqual(test_func.call_count, 1)
 
     def test_unexpected_400_response(self):
@@ -1620,7 +1653,7 @@ class CallWithRetriesTest(TestBase):
         test_func = self._http_error_fn(400, 'Some other reason')
 
         with self.assertRaises(apiclient.errors.HttpError):
-            alertlib._call_with_retries(test_func, wait_time=0)
+            alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
 
         self.assertEqual(test_func.call_count, 1)
 
@@ -1628,7 +1661,8 @@ class CallWithRetriesTest(TestBase):
         test_func = mock.Mock(side_effect=socket.error('error'))
 
         with self.assertRaises(socket.error):
-            alertlib._call_with_retries(test_func, num_retries=20, wait_time=0)
+            alertlib._call_stackdriver_with_retries(test_func, num_retries=20,
+                                                    wait_time=0)
 
         self.assertEqual(test_func.call_count, 21)
 
@@ -1636,12 +1670,12 @@ class CallWithRetriesTest(TestBase):
         side_effects = [socket.error('error'), socket.error('error'), 0]
         test_func = mock.Mock(side_effect=side_effects)
 
-        alertlib._call_with_retries(test_func, wait_time=0)
+        alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
         self.assertEqual(test_func.call_count, 3)
 
     def _http_error_fn(self, status_code, reason=""):
         response = CallWithRetriesTest.MockHttpResponse(status_code, reason)
-        error = apiclient.errors.HttpError(response, "content not used")
+        error = apiclient.errors.HttpError(response, "expected error")
 
         return mock.Mock(side_effect=error)
 
