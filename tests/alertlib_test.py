@@ -1517,6 +1517,20 @@ class StackdriverTest(TestBase):
         self.assertEqual('custom.googleapis.com/stats.Bad_M_tric_name',
                          sent_metric_name)
 
+    def test_ignore_errors(self):
+        self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
+                  lambda s, proj, data: 1 / 0)
+        self.alert.send_to_stackdriver('stats.test_message', 4)
+
+        self.assertEqual([], self.sent_to_stackdriver)
+
+    def test_do_not_ignore_errors(self):
+        self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
+                  lambda s, proj, data: 1 / 0)
+        with self.assertRaises(ZeroDivisionError):
+            self.alert.send_to_stackdriver('stats.test_message', 4,
+                                           ignore_errors=False)
+
     def _get_sent_timeseries_data(self):
         self.assertEqual(1, len(self.sent_to_stackdriver))
         sent_data = self.sent_to_stackdriver[0]

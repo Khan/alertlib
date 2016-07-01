@@ -1152,12 +1152,19 @@ class Alert(object):
                             metric_name,
                             value=DEFAULT_STACKDRIVER_VALUE,
                             kind=DEFAULT_STACKDRIVER_KIND,
-                            project=DEFAULT_STACKDRIVER_PROJECT):
+                            project=DEFAULT_STACKDRIVER_PROJECT,
+                            ignore_errors=True):
         """Send a new datapoint for the given metric to stackdriver.
 
         Metric names should be a dotted name as used by stackdriver: e.g.
         myapp.stats.num_failures.  When send_to_stackdriver() is called,
         we add a datapoint for the given value and the current timestamp.
+
+        If ignore_errors is True (the default), we silently fail if we
+        can't send to stackdriver for some reason.  This mimics the
+        behavior of send_to_graphite, which never notices errors since
+        the graphite data is sent via UDP.  Since we use HTTP to send
+        the data, we *can* (optionally) notice errors.
         """
         if not self._passed_rate_limit('stackdriver'):
             return self
@@ -1170,7 +1177,11 @@ class Alert(object):
             logging.info("alertlib: would send to stackdriver: "
                          "metric_name: %s, value: %s" % (metric_name, value))
         else:
-            self._send_datapoint_to_stackdriver(project, timeseries_data)
+            try:
+                self._send_datapoint_to_stackdriver(project, timeseries_data)
+            except Exception:
+                if not ignore_errors:
+                    raise
         return self
 
     def _get_custom_metric_name(self, name):
