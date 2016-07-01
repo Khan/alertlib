@@ -177,7 +177,8 @@ def alert(message, args):
     for statistic in args.stackdriver:
         a.send_to_stackdriver(statistic, args.stackdriver_value,
                               args.stackdriver_kind,
-                              args.stackdriver_project)
+                              args.stackdriver_project,
+                              ignore_errors=False)
 
 
 def main(argv):
