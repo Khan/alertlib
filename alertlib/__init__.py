@@ -51,7 +51,6 @@ When sending to email, we try using both google appengine (for when
 you're using this within an appengine app) and sendmail.
 """
 
-import datetime
 import json
 import httplib
 import logging
@@ -1156,6 +1155,7 @@ class Alert(object):
                             monitored_resource_type=None,
                             monitored_resource_labels={},
                             project=DEFAULT_STACKDRIVER_PROJECT,
+                            when=None,
                             ignore_errors=True):
         """Send a new datapoint for the given metric to stackdriver.
 
@@ -1179,6 +1179,9 @@ class Alert(object):
            https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.monitoredResourceDescriptors/list#try-it
         to see all the monitored-resources available.
 
+        If when is not None, it should be a time_t specifying the
+        time associated with the datapoint.  If None, we use now.
+
         If ignore_errors is True (the default), we silently fail if we
         can't send to stackdriver for some reason.  This mimics the
         behavior of send_to_graphite, which never notices errors since
@@ -1190,7 +1193,8 @@ class Alert(object):
 
         timeseries_data = self._get_timeseries_data(
             metric_name, metric_labels,
-            monitored_resource_type, monitored_resource_labels, value, kind)
+            monitored_resource_type, monitored_resource_labels,
+            value, kind, when)
         if stackdriver_not_allowed:
             logging.error("Unable to send to stackdriver: %s"
                     % stackdriver_not_allowed)
@@ -1199,8 +1203,7 @@ class Alert(object):
                          "metric_name: %s, value: %s" % (metric_name, value))
         else:
             try:
-                self._send_datapoints_to_stackdriver(project,
-                                                     [timeseries_data])
+                self.send_datapoints_to_stackdriver([timeseries_data], project)
             except Exception as e:
                 if not ignore_errors:
                     # cloud-monitoring API seems to put more content
@@ -1229,9 +1232,11 @@ class Alert(object):
     def _get_timeseries_data(self, metric_name, metric_labels,
                              monitored_resource_type,
                              monitored_resource_labels,
-                             value, kind):
+                             value, kind, when):
         # Datetime formatted per RFC 3339.
-        now = datetime.datetime.utcnow().isoformat("T") + "Z"
+        if when is None:
+            when = time.time()
+        time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(when))
 
         name = self._get_custom_metric_name(metric_name)
         timeseries_data = {
@@ -1242,11 +1247,11 @@ class Alert(object):
             "points": [
                 {
                     "interval": {
-                        "startTime": now,
-                        "endTime": now
+                        "startTime": time_str,
+                        "endTime": time_str,
                     },
                     "value": {
-                        "doubleValue": value
+                        "doubleValue": value,
                     }
                 }
             ]
@@ -1258,8 +1263,13 @@ class Alert(object):
                                            "labels": monitored_resource_labels}
         return timeseries_data
 
-    def _send_datapoints_to_stackdriver(self, project, timeseries_data):
-        # This is a separate function just to make it easy to mock for tests.
+    def send_datapoints_to_stackdriver(self, timeseries_data,
+                                       project=DEFAULT_STACKDRIVER_PROJECT):
+        """A low-level function used by send_to_stackdriver."""
+        # This is mostly a separate function just to make it easy to
+        # mock for tests.  But we also expose it as part of the public API
+        # to make it possible (via complicated mocking) to send multiple
+        # stats to stackdriver at the same time.
         client = _get_google_apiclient()
 
         project_resource = "projects/%s" % project

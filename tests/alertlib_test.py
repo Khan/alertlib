@@ -127,8 +127,8 @@ class TestBase(unittest.TestCase):
         self.mock(alertlib, '_graphite_socket',
                   lambda hostname: FakeGraphiteSocket)
 
-        self.mock(alertlib.Alert, '_send_datapoints_to_stackdriver',
-                  lambda s, proj, data: self.sent_to_stackdriver.extend(data))
+        self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
+                  lambda s, data, proj: self.sent_to_stackdriver.extend(data))
 
     def tearDown(self):
         # None of the tests should have caused any errors unless specifcally
@@ -1550,16 +1550,25 @@ class StackdriverTest(TestBase):
         }
         self.assertEqual(sent_metric, expected)
 
+    def test_when(self):
+        self.alert.send_to_stackdriver(
+            'stats.test_message',
+            when=1467411024)
+        sent_data_point = self._get_sent_datapoint()
+        self.assertEqual({'startTime': '2016-07-01T22:10:24Z',
+                          'endTime': '2016-07-01T22:10:24Z'},
+                         sent_data_point['interval'])
+
     def test_ignore_errors(self):
-        self.mock(alertlib.Alert, '_send_datapoints_to_stackdriver',
-                  lambda s, proj, data: 1 / 0)
+        self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
+                  lambda *a, **kw: 1 / 0)
         self.alert.send_to_stackdriver('stats.test_message', 4)
 
         self.assertEqual([], self.sent_to_stackdriver)
 
     def test_do_not_ignore_errors(self):
-        self.mock(alertlib.Alert, '_send_datapoints_to_stackdriver',
-                  lambda s, proj, data: 1 / 0)
+        self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
+                  lambda *a, **kw: 1 / 0)
         with self.assertRaises(ZeroDivisionError):
             self.alert.send_to_stackdriver('stats.test_message', 4,
                                            ignore_errors=False)
