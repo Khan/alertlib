@@ -1199,7 +1199,8 @@ class Alert(object):
                          "metric_name: %s, value: %s" % (metric_name, value))
         else:
             try:
-                self._send_datapoint_to_stackdriver(project, timeseries_data)
+                self._send_datapoints_to_stackdriver(project,
+                                                     [timeseries_data])
             except Exception as e:
                 if not ignore_errors:
                     # cloud-monitoring API seems to put more content
@@ -1257,18 +1258,14 @@ class Alert(object):
                                            "labels": monitored_resource_labels}
         return timeseries_data
 
-    def _send_datapoint_to_stackdriver(self, project, timeseries_data):
+    def _send_datapoints_to_stackdriver(self, project, timeseries_data):
         # This is a separate function just to make it easy to mock for tests.
         client = _get_google_apiclient()
 
         project_resource = "projects/%s" % project
 
-        # TODO(csilvers): manually create the metricDescriptor if necessary.
-        # Cache so we don't have to create a metric many times.  e.g.
-        #    client.projects().metricDescriptors().create(name=project_resource, body={"name": "projects/khan-academy/metricDescriptors/custom.googleapis.com/logs.500", "type": "custom.googleapis.com/logs.500", "metricKind": "GAUGE", "valueType": "DOUBLE", "labels": [{"key": "module"}]})   # @Nolint(long line)
-
         request = client.projects().timeSeries().create(
-            name=project_resource, body={"timeSeries": [timeseries_data]})
+            name=project_resource, body={"timeSeries": timeseries_data})
         _call_stackdriver_with_retries(request.execute)
 
 

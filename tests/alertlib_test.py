@@ -127,8 +127,8 @@ class TestBase(unittest.TestCase):
         self.mock(alertlib, '_graphite_socket',
                   lambda hostname: FakeGraphiteSocket)
 
-        self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
-                  lambda s, proj, data: self.sent_to_stackdriver.append(data))
+        self.mock(alertlib.Alert, '_send_datapoints_to_stackdriver',
+                  lambda s, proj, data: self.sent_to_stackdriver.extend(data))
 
     def tearDown(self):
         # None of the tests should have caused any errors unless specifcally
@@ -1551,14 +1551,14 @@ class StackdriverTest(TestBase):
         self.assertEqual(sent_metric, expected)
 
     def test_ignore_errors(self):
-        self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
+        self.mock(alertlib.Alert, '_send_datapoints_to_stackdriver',
                   lambda s, proj, data: 1 / 0)
         self.alert.send_to_stackdriver('stats.test_message', 4)
 
         self.assertEqual([], self.sent_to_stackdriver)
 
     def test_do_not_ignore_errors(self):
-        self.mock(alertlib.Alert, '_send_datapoint_to_stackdriver',
+        self.mock(alertlib.Alert, '_send_datapoints_to_stackdriver',
                   lambda s, proj, data: 1 / 0)
         with self.assertRaises(ZeroDivisionError):
             self.alert.send_to_stackdriver('stats.test_message', 4,
