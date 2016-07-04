@@ -128,7 +128,8 @@ class TestBase(unittest.TestCase):
                   lambda hostname: FakeGraphiteSocket)
 
         self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
-                  lambda s, data, proj: self.sent_to_stackdriver.extend(data))
+                  lambda s, data, *a, **kw: (
+                      self.sent_to_stackdriver.extend(data)))
 
     def tearDown(self):
         # None of the tests should have caused any errors unless specifcally

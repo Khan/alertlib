@@ -1202,15 +1202,8 @@ class Alert(object):
             logging.info("alertlib: would send to stackdriver: "
                          "metric_name: %s, value: %s" % (metric_name, value))
         else:
-            try:
-                self.send_datapoints_to_stackdriver([timeseries_data], project)
-            except Exception as e:
-                if not ignore_errors:
-                    # cloud-monitoring API seems to put more content
-                    # in 'content'.
-                    if hasattr(e, 'content'):
-                        logging.error('CLOUD-MONITORING ERROR: %s' % e.content)
-                    raise
+            self.send_datapoints_to_stackdriver([timeseries_data], project,
+                                                ignore_errors)
         return self
 
     def _get_custom_metric_name(self, name):
@@ -1264,7 +1257,8 @@ class Alert(object):
         return timeseries_data
 
     def send_datapoints_to_stackdriver(self, timeseries_data,
-                                       project=DEFAULT_STACKDRIVER_PROJECT):
+                                       project=DEFAULT_STACKDRIVER_PROJECT,
+                                       ignore_errors=True):
         """A low-level function used by send_to_stackdriver."""
         # This is mostly a separate function just to make it easy to
         # mock for tests.  But we also expose it as part of the public API
@@ -1276,7 +1270,17 @@ class Alert(object):
 
         request = client.projects().timeSeries().create(
             name=project_resource, body={"timeSeries": timeseries_data})
-        _call_stackdriver_with_retries(request.execute)
+
+        try:
+            _call_stackdriver_with_retries(request.execute)
+        except Exception as e:
+            if not ignore_errors:
+                # cloud-monitoring API seems to put more content
+                # in 'content'.
+                if hasattr(e, 'content'):
+                    logging.error('CLOUD-MONITORING ERROR sending %s: %s'
+                                  % (request.to_json(), e.content))
+                raise
 
 
 __all__ = [
