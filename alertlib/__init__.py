@@ -1277,7 +1277,7 @@ class Alert(object):
             if not ignore_errors:
                 # cloud-monitoring API seems to put more content
                 # in 'content'.
-                if hasattr(e, 'content'):
+                if hasattr(e, 'content') and hasattr(request, 'to_json'):
                     logging.error('CLOUD-MONITORING ERROR sending %s: %s'
                                   % (request.to_json(), e.content))
                 raise

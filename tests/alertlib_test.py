@@ -101,6 +101,8 @@ class TestBase(unittest.TestCase):
 
         # We need to mock out a bunch of stuff so we don't actually
         # talk to the real world.
+        self.mock_origs = {}   # used to unmock if needed
+
         self.mock(alertlib.Alert, '_make_hipchat_api_call',
                   lambda s, post_dict: self.sent_to_hipchat.append(post_dict))
 
@@ -142,11 +144,17 @@ class TestBase(unittest.TestCase):
 
     def mock(self, container, var_str, new_value):
         if hasattr(container, var_str):
-            old_value = getattr(container, var_str)
-            self.addCleanup(lambda: setattr(container, var_str, old_value))
+            oldval = getattr(container, var_str)
+            self.mock_origs[(container, var_str)] = oldval
+            self.addCleanup(lambda: setattr(container, var_str, oldval))
         else:
+            self.mock_origs[(container, var_str)] = None
             self.addCleanup(lambda: delattr(container, var_str))
         setattr(container, var_str, new_value)
+
+    def unmock(self, container, var_str):
+        """Used to unmock a function before the tests are ended."""
+        self.mock(container, var_str, self.mock_origs[(container, var_str)])
 
     def mock_urlopen(self, on_check_exists_vals=None, on_get_tags_vals=None,
                      on_get_projects_vals=None, on_get_user_vals=None,
@@ -1561,14 +1569,18 @@ class StackdriverTest(TestBase):
                          sent_data_point['interval'])
 
     def test_ignore_errors(self):
-        self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
+        self.unmock(alertlib.Alert, 'send_datapoints_to_stackdriver')
+        self.mock(alertlib, '_get_google_apiclient', mock.Mock())
+        self.mock(alertlib, '_call_stackdriver_with_retries',
                   lambda *a, **kw: 1 / 0)
         self.alert.send_to_stackdriver('stats.test_message', 4)
 
         self.assertEqual([], self.sent_to_stackdriver)
 
     def test_do_not_ignore_errors(self):
-        self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
+        self.unmock(alertlib.Alert, 'send_datapoints_to_stackdriver')
+        self.mock(alertlib, '_get_google_apiclient', mock.Mock())
+        self.mock(alertlib, '_call_stackdriver_with_retries',
                   lambda *a, **kw: 1 / 0)
         with self.assertRaises(ZeroDivisionError):
             self.alert.send_to_stackdriver('stats.test_message', 4,
