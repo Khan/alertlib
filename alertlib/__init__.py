@@ -213,6 +213,12 @@ def _call_stackdriver_with_retries(fn, num_retries=9, wait_time=0.5):
                 # the connection to google died before we got their ACK).
                 # We just pretend the call magically succeeded.
                 return
+            elif (code == 400 and
+                      'One or more TimeSeries could not be written' in str(e)):
+                # This can happen if the timestamp that we give is a little
+                # bit in the future according to google (due to clock skew?)
+                # We just wait a little bit and try again.
+                pass
             else:
                 raise
         time.sleep(wait_time)     # wait a bit before the next request
