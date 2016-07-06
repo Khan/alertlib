@@ -1585,6 +1585,9 @@ class StackdriverTest(TestBase):
         with self.assertRaises(ZeroDivisionError):
             self.alert.send_to_stackdriver('stats.test_message', 4,
                                            ignore_errors=False)
+        self.assertEqual([('cloud-monitoring error, not sending some data',)],
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
 
     def _get_sent_timeseries_data(self):
         self.assertEqual(1, len(self.sent_to_stackdriver))

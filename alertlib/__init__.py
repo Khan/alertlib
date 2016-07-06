@@ -1277,12 +1277,17 @@ class Alert(object):
         try:
             _call_stackdriver_with_retries(request.execute)
         except Exception as e:
-            if not ignore_errors:
-                # cloud-monitoring API seems to put more content
-                # in 'content'.
-                if hasattr(e, 'content') and hasattr(request, 'to_json'):
-                    logging.error('CLOUD-MONITORING ERROR sending %s: %s'
-                                  % (request.to_json(), e.content))
+            # cloud-monitoring API seems to put more content
+            # in 'content'.
+            if hasattr(e, 'content') and hasattr(request, 'to_json'):
+                msg = ('CLOUD-MONITORING ERROR sending %s: %s'
+                       % (request.to_json(), e.content))
+            else:
+                msg = 'cloud-monitoring error, not sending some data'
+            if ignore_errors:
+                logging.warning(msg)
+            else:
+                logging.error(msg)
                 raise
 
 
