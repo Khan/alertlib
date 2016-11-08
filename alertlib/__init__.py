@@ -1199,10 +1199,7 @@ class Alert(object):
             metric_name, metric_labels,
             monitored_resource_type, monitored_resource_labels,
             value, when)
-        if stackdriver_not_allowed:
-            logging.error("Unable to send to stackdriver: %s"
-                    % stackdriver_not_allowed)
-        elif _TEST_MODE:
+        if _TEST_MODE:
             logging.info("alertlib: would send to stackdriver: "
                          "metric_name: %s, value: %s" % (metric_name, value))
         else:
@@ -1267,6 +1264,11 @@ class Alert(object):
         # mock for tests.  But we also expose it as part of the public API
         # to make it possible (via complicated mocking) to send multiple
         # stats to stackdriver at the same time.
+
+        if stackdriver_not_allowed:
+            logging.error("Unable to send to stackdriver: %s",
+                          stackdriver_not_allowed)
+
         client = _get_google_apiclient()
 
         project_resource = "projects/%s" % project
