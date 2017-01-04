@@ -176,7 +176,8 @@ before use. These packages are only required for users that call
 `send_to_stackdriver`. To install the latest versions of these
 packages that are tested with alertlib, run:
 
-`pip install httplib2==0.9.2 oauth2client==1.2 google-api-python-client==1.2`
+`pip install httplib2==0.9.2 oauth2client==1.2 google-api-python-client==1.2
+pyOpenSSL==16.2.0`
 
 Note that these are older versions of these packages, which we are using here
 because they are the versions currently used by webapp.
