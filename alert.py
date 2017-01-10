@@ -12,6 +12,8 @@ import logging
 import sys
 
 import alertlib
+import alertlib.graphite
+import alertlib.stackdriver
 
 
 DEFAULT_SEVERITY = logging.INFO
@@ -125,18 +127,19 @@ def setup_parser():
                               'graphite statistics specified '
                               '(default %(default)s)'))
     parser.add_argument('--graphite_host',
-                        default=alertlib.Alert.DEFAULT_GRAPHITE_HOST,
+                        default=alertlib.graphite.DEFAULT_GRAPHITE_HOST,
                         help=('host:port to send graphite data to '
                               '(default %(default)s)'))
 
     parser.add_argument('--stackdriver_value',
-                        default=alertlib.Alert.DEFAULT_STACKDRIVER_VALUE,
+                        default=alertlib.stackdriver.DEFAULT_STACKDRIVER_VALUE,
                         type=float,
                         help=('Value to send to stackdriver for each of the '
                               'stackdriver statistics specified '
                               '(default %(default)s)'))
     parser.add_argument('--stackdriver_project',
-                        default=alertlib.Alert.DEFAULT_STACKDRIVER_PROJECT,
+                        default=(
+                            alertlib.stackdriver.DEFAULT_STACKDRIVER_PROJECT),
                         help=('Stackdriver project to send datapoints to '
                               '(default %(default)s)'))
 

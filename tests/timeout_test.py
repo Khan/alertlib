@@ -7,6 +7,7 @@ flags and sending alerts, so by testing timeout.py I'm testing most of
 alert.py as well.
 """
 
+import importlib
 import logging
 import os
 import subprocess
@@ -18,6 +19,11 @@ sys.path.insert(1, '.')
 
 import alertlib
 import timeout
+
+import alertlib_test
+
+for module in alertlib_test.ALERTLIB_MODULES:
+    importlib.import_module('alertlib.%s' % module)
 
 
 class TestTimeout(unittest.TestCase):
@@ -81,12 +87,16 @@ class TestAlerts(unittest.TestCase):
         # it would do without doing it.  Make sure we can see those
         # logs.
         self.sent_to_info_log = []
-        self.mock(alertlib.logging, 'info',
-                  lambda *args: self.sent_to_info_log.append(args))
-        self.mock(alertlib.logging, 'log',
-                  lambda severity, message: (
-                      self.sent_to_info_log.append((message,))
-                      if severity == logging.INFO else None))
+
+        for module in alertlib_test.ALERTLIB_MODULES:
+            alertlib_module = getattr(alertlib, module)
+            logging_module = getattr(alertlib_module, 'logging')
+            self.mock(logging_module, 'info',
+                      lambda *args: self.sent_to_info_log.append(args))
+            self.mock(logging_module, 'log',
+                      lambda severity, message: (
+                          self.sent_to_info_log.append((message,))
+                          if severity == logging.INFO else None))
 
         self.maxDiff = None
 

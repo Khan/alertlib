@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import httplib
+import importlib
 import socket
 import sys
 import syslog
@@ -35,8 +36,21 @@ fake_google_mail.__name__ = 'google_mail'
 sys.modules['google_mail'] = fake_google_mail
 
 # This makes it so we can find alertlib when running from repo-root.
-sys.path.insert(1, '.')
+sys.path.insert(0, '.')
 import alertlib
+
+ALERTLIB_MODULES = (
+    'asana',
+    'email',
+    'graphite',
+    'hipchat',
+    'logs',
+    'pagerduty',
+    'slack',
+    'stackdriver',
+)
+for module in ALERTLIB_MODULES:
+    importlib.import_module('alertlib.%s' % module)
 
 
 @contextlib.contextmanager
@@ -103,35 +117,36 @@ class TestBase(unittest.TestCase):
         # talk to the real world.
         self.mock_origs = {}   # used to unmock if needed
 
-        self.mock(alertlib.Alert, '_make_hipchat_api_call',
-                  lambda s, post_dict: self.sent_to_hipchat.append(post_dict))
+        self.mock(alertlib.hipchat, '_make_hipchat_api_call',
+                  lambda post_dict: self.sent_to_hipchat.append(post_dict))
 
-        self.mock(alertlib.Alert, '_make_slack_webhook_post',
-                  lambda s, payload: self.sent_to_slack.append(payload))
+        self.mock(alertlib.slack, '_make_slack_webhook_post',
+                  lambda payload: self.sent_to_slack.append(payload))
 
-        self.mock(alertlib.google_mail, 'send_mail',
+        self.mock(alertlib.email.google_mail, 'send_mail',
                   lambda **kwargs: self.sent_to_google_mail.append(kwargs))
 
-        self.mock(alertlib.smtplib, 'SMTP', FakeSMTP)
+        self.mock(alertlib.email.smtplib, 'SMTP', FakeSMTP)
 
-        self.mock(alertlib.logging, 'info',
-                  lambda *args: self.sent_to_info_log.append(args))
-
-        self.mock(alertlib.logging, 'warning',
-                  lambda *args: self.sent_to_warning_log.append(args))
-
-        self.mock(alertlib.logging, 'error',
-                  lambda *args: self.sent_to_error_log.append(args))
-
-        self.mock(alertlib.syslog, 'syslog',
+        self.mock(alertlib.logs.syslog, 'syslog',
                   lambda prio, msg: self.sent_to_syslog.append((prio, msg)))
 
-        self.mock(alertlib, '_graphite_socket',
+        self.mock(alertlib.graphite, '_graphite_socket',
                   lambda hostname: FakeGraphiteSocket)
 
-        self.mock(alertlib.Alert, 'send_datapoints_to_stackdriver',
-                  lambda s, data, *a, **kw: (
+        self.mock(alertlib.stackdriver, 'send_datapoints_to_stackdriver',
+                  lambda data, *a, **kw: (
                       self.sent_to_stackdriver.extend(data)))
+
+        for module in ALERTLIB_MODULES:
+            alertlib_module = getattr(alertlib, module)
+            logging_module = getattr(alertlib_module, 'logging')
+            self.mock(logging_module, 'info',
+                      lambda *args: self.sent_to_info_log.append(args))
+            self.mock(logging_module, 'warning',
+                      lambda *args: self.sent_to_warning_log.append(args))
+            self.mock(logging_module, 'error',
+                      lambda *args: self.sent_to_error_log.append(args))
 
     def tearDown(self):
         # None of the tests should have caused any errors unless specifcally
@@ -139,8 +154,8 @@ class TestBase(unittest.TestCase):
         # to [] before returning
         self.assertEqual([], self.sent_to_error_log)
 
-        alertlib._CACHED_ASANA_TAG_MAP = {}
-        alertlib._CACHED_ASANA_PROJECT_MAP = {}
+        alertlib.asana._CACHED_ASANA_TAG_MAP = {}
+        alertlib.asana._CACHED_ASANA_PROJECT_MAP = {}
 
     def mock(self, container, var_str, new_value):
         if hasattr(container, var_str):
@@ -366,10 +381,11 @@ class AsanaTest(TestBase):
         tag_names = ['P3']
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -388,10 +404,11 @@ class AsanaTest(TestBase):
         tag_names = ['P3']
         alert = alertlib.Alert('test message', summary='hi:')
         alert.send_to_asana(project=project_name, tags=tag_names)
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -411,10 +428,11 @@ class AsanaTest(TestBase):
                                severity=logging.WARNING)
         alert.send_to_asana(project=project_name)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -430,9 +448,9 @@ class AsanaTest(TestBase):
         alert = alertlib.Alert('test message', summary='hi',
                                severity=logging.ERROR)
         alert.send_to_asana(project=project_name)
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P2']
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P2']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -448,9 +466,9 @@ class AsanaTest(TestBase):
         alert = alertlib.Alert('test message', summary='hi',
                                severity=logging.CRITICAL)
         alert.send_to_asana(project=project_name)
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P1']
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P1']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -471,11 +489,12 @@ class AsanaTest(TestBase):
                                severity=logging.ERROR)
         alert.send_to_asana(project=project_name, tags=tag_names)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
-        expected_tag_ids.extend(alertlib._CACHED_ASANA_TAG_MAP['P1'])
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(alertlib.asana._CACHED_ASANA_TAG_MAP['P1'])
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -504,12 +523,13 @@ class AsanaTest(TestBase):
         tag_names = ['Evil tag']
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['Evil tag']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['Evil tag']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['P4'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['P4'])
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -529,12 +549,13 @@ class AsanaTest(TestBase):
         tag_names = ['Evil tag']
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['Evil tag']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['Evil tag']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['P4'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['P4'])
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -558,11 +579,12 @@ class AsanaTest(TestBase):
         alert.send_to_asana(project=project_name, tags=tag_names,
                             followers=followers)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
-        expected_tag_ids.extend(alertlib._CACHED_ASANA_TAG_MAP['P1'])
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(alertlib.asana._CACHED_ASANA_TAG_MAP['P1'])
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [0],
                            'name': 'hi',
@@ -585,11 +607,12 @@ class AsanaTest(TestBase):
         alert.send_to_asana(project=project_name, tags=tag_names,
                             followers=followers)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
-        expected_tag_ids.extend(alertlib._CACHED_ASANA_TAG_MAP['P1'])
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
+        expected_tag_ids.extend(alertlib.asana._CACHED_ASANA_TAG_MAP['P1'])
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -624,13 +647,13 @@ class AsanaTest(TestBase):
         tag_names = ['llama', 'also llama']
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[
+        expected_project_ids = alertlib.asana._CACHED_ASANA_PROJECT_MAP[
             'Evil project']
         expected_tag_ids = []
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['P4'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['P4'])
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -655,10 +678,11 @@ class AsanaTest(TestBase):
         tag_names = ['P3', 'llama']
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -682,10 +706,11 @@ class AsanaTest(TestBase):
         alert = alertlib.Alert('test message')
         alert.send_to_asana(project=project_name, tags=tag_names)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
 
         self.assertEqual([{'data':
                           {'followers': [],
@@ -708,10 +733,11 @@ class AsanaTest(TestBase):
                                severity=logging.WARNING)
         alert.send_to_asana(project=project_name)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -737,10 +763,11 @@ class AsanaTest(TestBase):
                                severity=logging.WARNING)
         alert.send_to_asana(project=project_name)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -824,10 +851,11 @@ class AsanaTest(TestBase):
                                severity=logging.WARNING)
         alert.send_to_asana(project=project_name)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -852,10 +880,11 @@ class AsanaTest(TestBase):
                                severity=logging.WARNING)
         alert.send_to_asana(project=project_name)
 
-        expected_project_ids = alertlib._CACHED_ASANA_PROJECT_MAP[project_name]
-        expected_tag_ids = alertlib._CACHED_ASANA_TAG_MAP['P3']
+        expected_project_ids = (
+            alertlib.asana._CACHED_ASANA_PROJECT_MAP[project_name])
+        expected_tag_ids = alertlib.asana._CACHED_ASANA_TAG_MAP['P3']
         expected_tag_ids.extend(
-            alertlib._CACHED_ASANA_TAG_MAP['Auto generated'])
+            alertlib.asana._CACHED_ASANA_TAG_MAP['Auto generated'])
         self.assertEqual([{'data':
                           {'followers': [],
                            'name': 'hi',
@@ -1569,18 +1598,18 @@ class StackdriverTest(TestBase):
                          sent_data_point['interval'])
 
     def test_ignore_errors(self):
-        self.unmock(alertlib.Alert, 'send_datapoints_to_stackdriver')
-        self.mock(alertlib, '_get_google_apiclient', mock.Mock())
-        self.mock(alertlib, '_call_stackdriver_with_retries',
+        self.unmock(alertlib.stackdriver, 'send_datapoints_to_stackdriver')
+        self.mock(alertlib.stackdriver, '_get_google_apiclient', mock.Mock())
+        self.mock(alertlib.stackdriver, '_call_stackdriver_with_retries',
                   lambda *a, **kw: 1 / 0)
         self.alert.send_to_stackdriver('stats.test_message', 4)
 
         self.assertEqual([], self.sent_to_stackdriver)
 
     def test_do_not_ignore_errors(self):
-        self.unmock(alertlib.Alert, 'send_datapoints_to_stackdriver')
-        self.mock(alertlib, '_get_google_apiclient', mock.Mock())
-        self.mock(alertlib, '_call_stackdriver_with_retries',
+        self.unmock(alertlib.stackdriver, 'send_datapoints_to_stackdriver')
+        self.mock(alertlib.stackdriver, '_get_google_apiclient', mock.Mock())
+        self.mock(alertlib.stackdriver, '_call_stackdriver_with_retries',
                   lambda *a, **kw: 1 / 0)
         with self.assertRaises(ZeroDivisionError):
             self.alert.send_to_stackdriver('stats.test_message', 4,
@@ -1632,7 +1661,8 @@ class CallWithRetriesTest(TestBase):
 
             # On the N+1 try, the function re-raises
             with self.assertRaises(error_type):
-                alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+                alertlib.stackdriver._call_stackdriver_with_retries(
+                    test_func, wait_time=0)
 
             self.assertEqual(test_func.call_count, 10)
 
@@ -1640,7 +1670,8 @@ class CallWithRetriesTest(TestBase):
         test_func = mock.Mock(side_effect=RuntimeError('error'))
 
         with self.assertRaises(RuntimeError):
-            alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+            alertlib.stackdriver._call_stackdriver_with_retries(
+                test_func, wait_time=0)
 
         # We should not retry when unexpected errors are raised
         self.assertEqual(test_func.call_count, 1)
@@ -1652,7 +1683,8 @@ class CallWithRetriesTest(TestBase):
             test_func = self._http_error_fn(code)
 
             with self.assertRaises(apiclient.errors.HttpError):
-                alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+                alertlib.stackdriver._call_stackdriver_with_retries(
+                    test_func, wait_time=0)
 
             self.assertEqual(test_func.call_count, 10)
 
@@ -1660,7 +1692,8 @@ class CallWithRetriesTest(TestBase):
         test_func = self._http_error_fn(401)
 
         with self.assertRaises(apiclient.errors.HttpError):
-            alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+            alertlib.stackdriver._call_stackdriver_with_retries(
+                test_func, wait_time=0)
 
         # We should not retry when unexpected errors are raised
         self.assertEqual(test_func.call_count, 1)
@@ -1670,7 +1703,8 @@ class CallWithRetriesTest(TestBase):
         test_func = self._http_error_fn(400, error_msg)
 
         # We do not expect an error to be raised here
-        alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+        alertlib.stackdriver._call_stackdriver_with_retries(
+            test_func, wait_time=0)
         self.assertEqual(test_func.call_count, 1)
 
     def test_unexpected_400_response(self):
@@ -1678,7 +1712,8 @@ class CallWithRetriesTest(TestBase):
         test_func = self._http_error_fn(400, 'Some other reason')
 
         with self.assertRaises(apiclient.errors.HttpError):
-            alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+            alertlib.stackdriver._call_stackdriver_with_retries(
+                test_func, wait_time=0)
 
         self.assertEqual(test_func.call_count, 1)
 
@@ -1686,8 +1721,8 @@ class CallWithRetriesTest(TestBase):
         test_func = mock.Mock(side_effect=socket.error('error'))
 
         with self.assertRaises(socket.error):
-            alertlib._call_stackdriver_with_retries(test_func, num_retries=20,
-                                                    wait_time=0)
+            alertlib.stackdriver._call_stackdriver_with_retries(
+                test_func, num_retries=20, wait_time=0)
 
         self.assertEqual(test_func.call_count, 21)
 
@@ -1695,7 +1730,8 @@ class CallWithRetriesTest(TestBase):
         side_effects = [socket.error('error'), socket.error('error'), 0]
         test_func = mock.Mock(side_effect=side_effects)
 
-        alertlib._call_stackdriver_with_retries(test_func, wait_time=0)
+        alertlib.stackdriver._call_stackdriver_with_retries(
+            test_func, wait_time=0)
         self.assertEqual(test_func.call_count, 3)
 
     def _http_error_fn(self, status_code, reason=""):
@@ -1877,11 +1913,11 @@ class IntegrationTest(TestBase):
 
     def test_gae_sandbox(self):
         # Stub out imports just like appengine would.
-        old_smtplib = alertlib.smtplib
-        old_syslog = alertlib.syslog
+        old_smtplib = alertlib.email.smtplib
+        old_syslog = alertlib.logs.syslog
         try:
-            del alertlib.smtplib
-            del alertlib.syslog
+            del alertlib.email.smtplib
+            del alertlib.logs.syslog
 
             # Just make sure nothing crashes
             alertlib.Alert('test message') \
@@ -1891,8 +1927,8 @@ class IntegrationTest(TestBase):
                 .send_to_logs() \
                 .send_to_graphite('stats.alerted')
         finally:
-            alertlib.smtplib = old_smtplib
-            alertlib.syslog = old_syslog
+            alertlib.email.smtplib = old_smtplib
+            alertlib.logs.syslog = old_syslog
 
 
 if __name__ == '__main__':
