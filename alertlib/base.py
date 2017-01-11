@@ -19,7 +19,6 @@ method name, e.g. `_post_data_to_slack`, not `_post_data`.
 See graphite.py for a simple example.
 """
 
-from __future__ import absolute_import
 import logging
 import time
 
