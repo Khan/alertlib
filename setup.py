@@ -11,5 +11,5 @@ setup(
     packages=find_packages(),
     scripts=['alert.py'],
     description='Khan Academy alert library',
-    long_description='\n' + io.open('README.md', 'rb').read(),
+    long_description='\n' + io.open('README.md', encoding='utf-8').read(),
 )
