@@ -7,6 +7,7 @@ appengine environment, or sendmail otherwise.
 from __future__ import absolute_import
 import logging
 import re
+import six
 
 try:
     # We use the simpler name here just to make it easier to mock for tests
@@ -60,9 +61,9 @@ class Mixin(base.BaseMixin):
 
     def _send_to_sendmail(self, message, email_addresses, cc=None, bcc=None,
                           sender=None):
-        msg = email.mime.text.MIMEText(message.encode('utf-8'),
+        msg = email.mime.text.MIMEText(base.handle_encoding(message),
                                        'html' if self.html else 'plain')
-        msg['Subject'] = self._get_summary().encode('utf-8')
+        msg['Subject'] = base.handle_encoding(self._get_summary())
         msg['From'] = _get_sender(sender)
         msg['To'] = ', '.join(email_addresses)
         # We could pass the priority in the 'Importance' header, but
@@ -70,11 +71,11 @@ class Mixin(base.BaseMixin):
         # that header when sending from appengine), we just use the
         # fact it's embedded in the subject line.
         if cc:
-            if not isinstance(cc, basestring):
+            if not isinstance(cc, six.string_types):
                 cc = ', '.join(cc)
             msg['Cc'] = cc
         if bcc:
-            if not isinstance(bcc, basestring):
+            if not isinstance(bcc, six.string_types):
                 bcc = ', '.join(bcc)
             msg['Bcc'] = bcc
 
@@ -96,14 +97,14 @@ class Mixin(base.BaseMixin):
         try:
             self._send_to_gae_email(message, email_addresses, cc, bcc, sender)
             return
-        except (NameError, AssertionError), why:
+        except (NameError, AssertionError) as why:
             pass
 
         # Try using local smtp.
         try:
             self._send_to_sendmail(message, email_addresses, cc, bcc, sender)
             return
-        except (NameError, smtplib.SMTPException), why:
+        except (NameError, smtplib.SMTPException) as why:
             pass
 
         logging.error('Failed sending email: %s' % why)
@@ -138,9 +139,9 @@ class Mixin(base.BaseMixin):
         def _normalize(lst):
             if lst is None:
                 return None
-            if isinstance(lst, basestring):
+            if isinstance(lst, six.string_types):
                 lst = [lst]
-            for i in xrange(len(lst)):
+            for i in range(len(lst)):
                 if not lst[i].endswith('@khanacademy.org'):
                     if '@' in lst[i]:
                         raise ValueError('Specify email usernames, '
@@ -160,7 +161,7 @@ class Mixin(base.BaseMixin):
         else:
             try:
                 self._send_to_email(email_addresses, cc, bcc, sender)
-            except Exception, why:
+            except Exception as why:
                 logging.error('Failed sending %s: %s' % (email_contents, why))
 
         return self

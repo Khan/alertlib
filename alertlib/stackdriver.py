@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 import json
-import httplib
+import six.moves.http_client
 import logging
 import re
 import socket
@@ -44,10 +44,10 @@ def _get_google_apiclient(google_creds):
 
 def _call_stackdriver_with_retries(fn, num_retries=9, wait_time=0.5):
     """Run fn (a network command) up to 9 times for non-fatal errors."""
-    for i in xrange(num_retries + 1):     # the last time, we re-raise
+    for i in range(num_retries + 1):     # the last time, we re-raise
         try:
             return fn()
-        except (socket.error, httplib.HTTPException,
+        except (socket.error, six.moves.http_client.HTTPException,
                 oauth2client.client.Error):
             if i == num_retries:
                 raise

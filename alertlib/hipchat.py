@@ -2,9 +2,8 @@
 
 from __future__ import absolute_import
 import logging
+import six
 import time
-import urllib
-import urllib2
 
 from . import base
 
@@ -20,8 +19,9 @@ _LOG_PRIORITY_TO_HIPCHAT_COLOR = {
 
 def _make_hipchat_api_call(post_dict_with_secret_token):
     # This is a separate function just to make it easy to mock for tests.
-    r = urllib2.urlopen('https://api.hipchat.com/v1/rooms/message',
-                        urllib.urlencode(post_dict_with_secret_token))
+    r = six.moves.urllib.urlopen(
+            'https://api.hipchat.com/v1/rooms/message',
+            six.moves.urllib.urlencode(post_dict_with_secret_token))
     if r.getcode() != 200:
         raise ValueError(r.read())
 
@@ -37,14 +37,13 @@ def _post_to_hipchat(post_dict):
     post_dict_with_secret_token = post_dict.copy()
     post_dict_with_secret_token['auth_token'] = hipchat_token
 
-    # urlencode requires that all fields be in utf-8.
-    for (k, v) in post_dict_with_secret_token.iteritems():
-        if isinstance(v, unicode):
-            post_dict_with_secret_token[k] = v.encode('utf-8')
+    # urlencode requires that all fields be in utf-8 in python2.x
+    for (k, v) in post_dict_with_secret_token.items():
+        post_dict_with_secret_token[k] = base.handle_encoding(v)
 
     try:
         _make_hipchat_api_call(post_dict_with_secret_token)
-    except Exception, why:
+    except Exception as why:
         logging.error('Failed sending %s to hipchat: %s'
                       % (post_dict, why))
 

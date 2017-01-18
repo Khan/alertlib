@@ -53,6 +53,35 @@ def secret(name):
     return getattr(secrets, name, None)
 
 
+def handle_encoding(string):
+    """There are a some places where unicode is not allowed in python2.x but
+    python 3.x handles it fine. This method utf-8 encodes unicode strings
+    if in python 2.7 and leaves it as unicode if in python 3.x
+    """
+    try:
+        # python 2.7
+        if isinstance(string, unicode):
+            return string.encode('utf-8')
+        else:
+            return string
+    except NameError:
+        # python 3.x
+        return string
+
+
+def maybe_from_utf8(string):
+    """Convert utf-8 input to unicode, leaving all other input alone."""
+    try:
+        # python 2.7
+        if isinstance(string, str):
+            return string.decode('utf-8')
+        else:
+            return string
+    except AttributeError:
+        # python 3.x
+        return string
+
+
 class BaseMixin(object):
     def __init__(self, message, summary=None, severity=logging.INFO,
                  html=False, rate_limit=None):
@@ -86,10 +115,8 @@ class BaseMixin(object):
         self.rate_limit = rate_limit
         self.last_sent = {}
 
-        if isinstance(self.message, str):
-            self.message = self.message.decode('utf-8')
-        if isinstance(self.summary, str):
-            self.summary = self.summary.decode('utf-8')
+        self.message = maybe_from_utf8(self.message)
+        self.summary = maybe_from_utf8(self.summary)
 
     def _passed_rate_limit(self, service):
         if not self.rate_limit:
@@ -144,5 +171,3 @@ class BaseMixin(object):
 
     def _in_test_mode(self):
         return _TEST_MODE
-
-

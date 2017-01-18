@@ -3,7 +3,7 @@
 from __future__ import absolute_import
 import json
 import logging
-import urllib2
+import six
 
 from . import base
 
@@ -43,22 +43,23 @@ def _call_asana_api(req_url_path, post_dict=None):
         return None
 
     host_url = 'https://app.asana.com'
-    req = urllib2.Request(host_url + req_url_path)
+    req = six.moves.urllib.request.Request(host_url + req_url_path)
     req.add_header('Authorization', 'Bearer %s' % asana_api_token)
 
     if post_dict is not None:
-        # urlencode requires that all fields be in utf-8.
         post_dict_copy = {'data': {}}
-        for (k, v) in post_dict['data'].iteritems():
-            if isinstance(v, unicode):
-                post_dict_copy['data'][k] = v.encode('utf-8')
-            else:
-                post_dict_copy['data'][k] = v
+        for (k, v) in post_dict['data'].items():
+            post_dict_copy['data'][k] = base.handle_encoding(v)
         req.add_header("Content-Type", "application/json")
-        post_dict = json.dumps(post_dict_copy)
+        # ensure_ascii=False here allows us to use unicode everywhere in py3.
+        # If in py2, it has just been converted to utf-8 in handle_encoding,
+        # which makes it safe to pass to urlopen and logging, below, in either
+        # case
+        post_dict = json.dumps(post_dict_copy, sort_keys=True,
+                               ensure_ascii=False)
 
     try:
-        res = urllib2.urlopen(req, post_dict)
+        res = six.moves.urllib.request.urlopen(req, post_dict)
     except Exception as e:
         logging.error('Failed sending %s to asana because of %s'
                       % (post_dict, e))

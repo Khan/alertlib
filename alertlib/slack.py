@@ -3,7 +3,7 @@
 from __future__ import absolute_import
 import json
 import logging
-import urllib2
+import six
 
 from . import base
 
@@ -20,9 +20,10 @@ _LOG_PRIORITY_TO_SLACK_COLOR = {
 
 def _make_slack_webhook_post(payload_json):
     # This is a separate function just to make it easy to mock for tests.
-    req = urllib2.Request(base.secret('slack_alertlib_webhook_url'))
+    webhook = base.secret('slack_alertlib_webhook_url')
+    req = six.moves.urllib.request.Request(webhook)
     req.add_header("Content-Type", "application/json")
-    res = urllib2.urlopen(req, payload_json)
+    res = six.moves.urllib.urlopen(req, payload_json)
     if res.getcode() != 200:
         raise ValueError(res.read())
 

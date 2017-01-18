@@ -36,7 +36,8 @@ class Mixin(base.BaseMixin):
         if not self._in_test_mode():
             try:
                 syslog_priority = self._mapped_severity(_LOG_TO_SYSLOG)
-                syslog.syslog(syslog_priority, self.message.encode('utf-8'))
+                syslog.syslog(syslog_priority,
+                              base.handle_encoding(self.message))
             except (NameError, KeyError):
                 pass
 

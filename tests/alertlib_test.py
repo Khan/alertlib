@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
 """Tests for alertlib/__init__.py."""
-
 import contextlib
 import json
 import logging
-import httplib
+import http.client
 import importlib
 import socket
 import sys
@@ -13,11 +12,12 @@ import syslog
 import time
 import types
 import unittest
-import urllib2
+import six
 
 import apiclient.errors
 import oauth2client
 import mock
+
 
 # Before we can import alertlib, we need to define a module 'secrets'
 # so the alertlib import can succeed
@@ -67,7 +67,7 @@ def disable_google_mail():
 
 
 class MockResponse:
-    """Mock of urllib2.Request object with only necessary methods."""
+    """Mock of six.moves.urllib.request.Request with only necessary methods."""
     def __init__(self, mock_read_val, mock_status_code):
         self.mock_read_val = json.dumps({'data': mock_read_val})
         self.mock_status_code = mock_status_code
@@ -232,7 +232,7 @@ class TestBase(unittest.TestCase):
                 raise mock_read_val
             return MockResponse(mock_read_val, mock_status_code)
 
-        self.mock(urllib2, 'urlopen', new_mock_urlopen)
+        self.mock(six.moves.urllib.request, 'urlopen', new_mock_urlopen)
 
 
 class HipchatTest(TestBase):
@@ -301,14 +301,16 @@ class HipchatTest(TestBase):
         self.assertLess(len(self.sent_to_hipchat[0]['message']), 10000)
 
     def test_utf8(self):
-        alertlib.Alert(u'\xf7').send_to_hipchat(u'1s and \xf7s')
+        message = u'\xf7'
+        room_id = u'1s and \xf7s'
+        alertlib.Alert(message).send_to_hipchat(room_id)
         self.assertEqual([{'auth_token': '<hipchat token>',
                            'color': 'purple',
                            'from': 'AlertiGator',
-                           'message': '\xc3\xb7',
+                           'message': alertlib.base.handle_encoding(message),
                            'message_format': 'text',
                            'notify': 0,
-                           'room_id': '1s and \xc3\xb7s'}],
+                           'room_id': alertlib.base.handle_encoding(room_id)}],
                          self.sent_to_hipchat)
 
     def test_summary(self):
@@ -341,19 +343,20 @@ class HipchatTest(TestBase):
                          self.sent_to_hipchat)
 
     def test_nix_emoticons(self):
+        zwsp = alertlib.base.handle_encoding(u'\u200b')
         alertlib.Alert('(commit 345d8)', summary='(345d8)').send_to_hipchat(
             'rm')
         self.assertEqual([{'auth_token': '<hipchat token>',
                            'color': 'purple',
                            'from': 'AlertiGator',
-                           'message': '(345d8\xe2\x80\x8b)',
+                           'message': '(345d8{})'.format(zwsp),
                            'message_format': 'text',
                            'notify': 0,
                            'room_id': 'rm'},
                           {'auth_token': '<hipchat token>',
                            'color': 'purple',
                            'from': 'AlertiGator',
-                           'message': '(commit 345d8\xe2\x80\x8b)',
+                           'message': '(commit 345d8{})'.format(zwsp),
                            'message_format': 'text',
                            'notify': 0,
                            'room_id': 'rm'}],
@@ -831,11 +834,11 @@ class AsanaTest(TestBase):
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
         self.assertEqual([], self.sent_to_asana)
-        expected_error_log = [('Failed sending {"data": {"name": "hi", "tags":'
-                               ' [1, 2, 3, 44, 666], "notes": "test message", '
-                               '"followers": [], "workspace": 1120786379245, '
-                               '"projects": [1, 2, 3]}} to asana because of '
-                               'Test failure',)]
+        expected_error_log = [('Failed sending {"data": {"followers": [], '
+                               '"name": "hi", "notes": "test message", '
+                               '"projects": [1, 2, 3], "tags": [1, 2, 3, 44,'
+                               ' 666], "workspace": 1120786379245}} to asana '
+                               'because of Test failure',)]
 
         self.assertEqual(expected_error_log,
                          self.sent_to_error_log)
@@ -957,11 +960,11 @@ class AsanaTest(TestBase):
         alert = alertlib.Alert('test message', summary='hi')
         alert.send_to_asana(project=project_name, tags=tag_names)
         self.assertEqual([], self.sent_to_asana)
-        expected_error_log = [('Failed sending {"data": {"name": "hi", "tags":'
-                               ' [1, 2, 3, 44, 666], "notes": "test message", '
-                               '"followers": [], "workspace": 1120786379245, '
-                               '"projects": [1, 2, 3]}} to asana with code '
-                               '400',)]
+        expected_error_log = [('Failed sending {"data": {"followers": [], '
+                               '"name": "hi", "notes": "test message", '
+                               '"projects": [1, 2, 3], "tags": [1, 2, 3, 44, '
+                               '666], "workspace": 1120786379245}} to asana '
+                               'with code 400',)]
 
         self.assertEqual(expected_error_log,
                          self.sent_to_error_log)
@@ -1448,7 +1451,10 @@ class EmailTest(TestBase):
                           ],
                          self.sent_to_sendmail)
 
-    def test_utf8(self):
+    def test_utf8_python2(self):
+        if sys.version_info >= (3, 0):
+            return
+
         with disable_google_mail():
             alertlib.Alert(u'yo \xf7', summary=u'yep \xf7') \
                 .send_to_pagerduty('oncall') \
@@ -1473,6 +1479,40 @@ class EmailTest(TestBase):
                            'From: alertlib <no-reply@khanacademy.org>\n'
                            'To: ka-admin@khanacademy.org\n\n'
                            'yo \xc3\xb7\n'
+                           ),
+                          ],
+                         self.sent_to_sendmail)
+        self.assertEqual([], self.sent_to_google_mail)
+
+    def test_utf8_python3(self):
+        '''In Python 3 we should actually send the email in UTF-8'''
+        if sys.version_info < (3, 0):
+            return
+
+        with disable_google_mail():
+            alertlib.Alert(u'yo \xf7', summary=u'yep \xf7') \
+                .send_to_pagerduty('oncall') \
+                .send_to_email('ka-admin')
+
+        self.assertEqual([('no-reply@khanacademy.org',
+                           ['oncall@khan-academy.pagerduty.com'],
+                           'Content-Type: text/plain; charset="utf-8"\n'
+                           'MIME-Version: 1.0\n'
+                           'Content-Transfer-Encoding: base64\n'
+                           'Subject: =?utf-8?b?eWVwIMO3?=\n'
+                           'From: alertlib <no-reply@khanacademy.org>\n'
+                           'To: oncall@khan-academy.pagerduty.com\n\n'
+                           'eW8gw7cK\n'
+                           ),
+                          ('no-reply@khanacademy.org',
+                           ['ka-admin@khanacademy.org'],
+                           'Content-Type: text/plain; charset="utf-8"\n'
+                           'MIME-Version: 1.0\n'
+                           'Content-Transfer-Encoding: base64\n'
+                           'Subject: =?utf-8?b?eWVwIMO3?=\n'
+                           'From: alertlib <no-reply@khanacademy.org>\n'
+                           'To: ka-admin@khanacademy.org\n\n'
+                           'eW8gw7cK\n'
                            ),
                           ],
                          self.sent_to_sendmail)
@@ -1624,7 +1664,7 @@ class StackdriverTest(TestBase):
 
         # Ensure the timeseries has the keys we expect
         expected_keys = {'metric', 'points'}
-        self.assertTrue(expected_keys.issubset(set(sent_data.keys())))
+        self.assertTrue(expected_keys.issubset(set(sent_data)))
 
         return sent_data
 
@@ -1653,7 +1693,7 @@ class CallWithRetriesTest(TestBase):
             return self.reason
 
     def test_expected_errors(self):
-        error_types = [socket.error, httplib.HTTPException,
+        error_types = [socket.error, http.client.HTTPException,
                 oauth2client.client.Error]
 
         for error_type in error_types:
@@ -1736,7 +1776,7 @@ class CallWithRetriesTest(TestBase):
 
     def _http_error_fn(self, status_code, reason=""):
         response = CallWithRetriesTest.MockHttpResponse(status_code, reason)
-        error = apiclient.errors.HttpError(response, "expected error")
+        error = apiclient.errors.HttpError(response, b"expected error")
 
         return mock.Mock(side_effect=error)
 
@@ -1759,19 +1799,19 @@ class RateLimitingTest(TestBase):
 
     def test_no_rate_limiting(self):
         alert = alertlib.Alert('test message')
-        for _ in xrange(100):
+        for _ in range(100):
             alert.send_to_graphite('stats.test_message', 4)
         self.assertEqual(100, len(self.sent_to_graphite))
 
     def test_burst(self):
         alert = alertlib.Alert('test message', rate_limit=60)
-        for _ in xrange(100):
+        for _ in range(100):
             alert.send_to_graphite('stats.test_message', 4)
         self.assertEqual(1, len(self.sent_to_graphite))
 
     def test_different_alert_objects(self):
         # Objects don't share state, so we won't rate limit here.
-        for _ in xrange(100):
+        for _ in range(100):
             alertlib.Alert('test message').send_to_graphite(
                 'stats.test_message', 4)
         self.assertEqual(100, len(self.sent_to_graphite))
@@ -1794,7 +1834,7 @@ class RateLimitingTest(TestBase):
 
     def test_limiting_on_different_services(self):
         alert = alertlib.Alert('test message', rate_limit=60)
-        for _ in xrange(100):
+        for _ in range(100):
             alert.send_to_graphite('stats.test_message', 4) \
                  .send_to_hipchat('1s and 0s') \
                  .send_to_stackdriver('stats.test_message')
@@ -1895,7 +1935,7 @@ class IntegrationTest(TestBase):
     def test_rate_limiting(self):
         """Make sure we put rate-limiting properly on each service."""
         alert = alertlib.Alert('test message', rate_limit=60)
-        for _ in xrange(10):
+        for _ in range(10):
             alert.send_to_hipchat('1s and 0s') \
                  .send_to_email('ka-admin') \
                  .send_to_pagerduty('oncall') \

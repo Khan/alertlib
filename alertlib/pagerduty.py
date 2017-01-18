@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 import logging
 import re
+import six
 
 from . import base
 
@@ -29,9 +30,9 @@ class Mixin(base.BaseMixin):
             return self
 
         def _service_name_to_email(lst):
-            if isinstance(lst, basestring):
+            if isinstance(lst, six.string_types):
                 lst = [lst]
-            for i in xrange(len(lst)):
+            for i in range(len(lst)):
                 if '@' in lst[i]:
                     raise ValueError('Specify PagerDuty service names, '
                                      'not addresses (%s)' % lst[i])
@@ -50,7 +51,7 @@ class Mixin(base.BaseMixin):
         else:
             try:
                 self._send_to_email(email_addresses)
-            except Exception, why:
+            except Exception as why:
                 logging.error('Failed sending %s: %s' % (email_contents, why))
 
         return self

@@ -71,7 +71,7 @@ class Mixin(base.BaseMixin):
             try:
                 _graphite_socket(graphite_host).send('%s.%s %s\n' % (
                     hostedgraphite_api_key, statistic, value))
-            except Exception, why:
+            except Exception as why:
                 logging.error('Failed sending to graphite: %s' % why)
 
         return self

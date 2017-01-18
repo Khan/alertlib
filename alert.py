@@ -7,6 +7,7 @@ commandline.  You should prefer to use the library directly for uses
 within Python.
 """
 
+from __future__ import print_function
 import argparse
 import logging
 import sys
@@ -188,7 +189,8 @@ def main(argv):
     args = parser.parse_args(argv)
 
     if sys.stdin.isatty():
-        print >>sys.stderr, '>> Enter the message to alert, then hit control-D'
+        print('>> Enter the message to alert, then hit control-D',
+              file=sys.stderr)
     message = sys.stdin.read().strip()
 
     if args.dry_run:
