@@ -1747,6 +1747,16 @@ class CallWithRetriesTest(TestBase):
             test_func, wait_time=0)
         self.assertEqual(test_func.call_count, 1)
 
+    def test_expected_500_timeseries_response(self):
+        error_msg = ('One or more of the points specified was older than '
+                     'the most recent stored point.')
+        test_func = self._http_error_fn(500, error_msg)
+
+        # We do not expect an error to be raised here
+        alertlib.stackdriver._call_stackdriver_with_retries(
+            test_func, wait_time=0)
+        self.assertEqual(test_func.call_count, 1)
+
     def test_unexpected_400_response(self):
         # If we have any other reason, we raise and do not retry
         test_func = self._http_error_fn(400, 'Some other reason')

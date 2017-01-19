@@ -1,0 +1,4 @@
+six==1.10.0
+google-api-python-client==1.2
+mock==2.0.0
+oauth2client==1.2

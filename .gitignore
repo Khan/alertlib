@@ -1,3 +1,8 @@
 *.py[cod]
 *.egg-info
 secrets.py
+bin/
+include/
+lib/
+.Python
+pip-selfcheck.json

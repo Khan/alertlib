@@ -9,6 +9,7 @@ setup(
     author='Khan Academy',
     license='Proprietary',
     packages=find_packages(),
+    install_requires=['six'],
     scripts=['alert.py'],
     description='Khan Academy alert library',
     long_description='\n' + io.open('README.md', encoding='utf-8').read(),

@@ -56,7 +56,17 @@ def _call_stackdriver_with_retries(fn, num_retries=9, wait_time=0.5):
             if i == num_retries:
                 raise
             code = int(e.resp['status'])
-            if code == 403 or code >= 500:     # 403: rate-limiting probably
+            if (code == 500 and
+                'One or more of the points specified was older than the most '
+                'recent stored point' in str(e)):
+                # This can happen when writing data that has already been
+                # written. In practice this occurs when retrying after there
+                # is an internal error in stackdriver when uploading data. Some
+                # of the data is written during the failed request, so we get
+                # an error when retrying with the same data.
+                return
+
+            elif code == 403 or code >= 500:     # 403: rate-limiting probably
                 pass
             elif (code == 400 and
                       'Timeseries data must be more recent' in str(e)):
