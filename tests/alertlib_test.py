@@ -4,7 +4,7 @@
 import contextlib
 import json
 import logging
-import http.client
+import six.moves.http_client
 import importlib
 import socket
 import sys
@@ -1693,7 +1693,7 @@ class CallWithRetriesTest(TestBase):
             return self.reason
 
     def test_expected_errors(self):
-        error_types = [socket.error, http.client.HTTPException,
+        error_types = [socket.error, six.moves.http_client.HTTPException,
                 oauth2client.client.Error]
 
         for error_type in error_types:
