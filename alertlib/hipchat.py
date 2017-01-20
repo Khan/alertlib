@@ -19,9 +19,10 @@ _LOG_PRIORITY_TO_HIPCHAT_COLOR = {
 
 def _make_hipchat_api_call(post_dict_with_secret_token):
     # This is a separate function just to make it easy to mock for tests.
+    post = six.moves.urllib.parse.urlencode(post_dict_with_secret_token)
     r = six.moves.urllib.request.urlopen(
             'https://api.hipchat.com/v1/rooms/message',
-            six.moves.urllib.parse.urlencode(post_dict_with_secret_token))
+            post.encode('utf-8'))
     if r.getcode() != 200:
         raise ValueError(r.read())
 

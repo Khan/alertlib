@@ -23,7 +23,7 @@ def _make_slack_webhook_post(payload_json):
     webhook = base.secret('slack_alertlib_webhook_url')
     req = six.moves.urllib.request.Request(webhook)
     req.add_header("Content-Type", "application/json")
-    res = six.moves.urllib.request.urlopen(req, payload_json)
+    res = six.moves.urllib.request.urlopen(req, payload_json.encode('utf-8'))
     if res.getcode() != 200:
         raise ValueError(res.read())
 

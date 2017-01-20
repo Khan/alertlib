@@ -51,20 +51,20 @@ def _call_asana_api(req_url_path, post_dict=None):
         for (k, v) in post_dict['data'].items():
             post_dict_copy['data'][k] = base.handle_encoding(v)
         req.add_header("Content-Type", "application/json")
-        # ensure_ascii=False here allows us to use unicode everywhere in py3.
-        # If in py2, it has just been converted to utf-8 in handle_encoding,
-        # which makes it safe to pass to urlopen and logging, below, in either
-        # case
         post_dict = json.dumps(post_dict_copy, sort_keys=True,
-                               ensure_ascii=False)
+                               ensure_ascii=False).encode('utf-8')
 
     try:
         res = six.moves.urllib.request.urlopen(req, post_dict)
     except Exception as e:
+        if isinstance(post_dict, six.binary_type):
+            post_dict = post_dict.decode('utf-8')
         logging.error('Failed sending %s to asana because of %s'
                       % (post_dict, e))
         return None
     if res.getcode() >= 300:
+        if isinstance(post_dict, six.binary_type):
+            post_dict = post_dict.decode('utf-8')
         logging.error('Failed sending %s to asana with code %d'
                       % (post_dict, res.getcode()))
         return None

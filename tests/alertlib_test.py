@@ -228,6 +228,11 @@ class TestBase(unittest.TestCase):
             else:
                 raise Exception('Invalid Asana API url')
 
+            if six.PY3 and isinstance(data, six.text_type):
+                raise TypeError(
+                        'POST data should be bytes, an iterable of bytes, or '
+                        'a file object. It cannot be of type str.')
+
             if isinstance(mock_read_val, Exception):
                 raise mock_read_val
             return MockResponse(mock_read_val, mock_status_code)

@@ -20,6 +20,7 @@ See graphite.py for a simple example.
 """
 
 import logging
+import six
 import time
 
 try:
@@ -58,27 +59,23 @@ def handle_encoding(string):
     python 3.x handles it fine. This method utf-8 encodes unicode strings
     if in python 2.7 and leaves it as unicode if in python 3.x
     """
-    try:
-        # python 2.7
+    if six.PY2:
         if isinstance(string, unicode):
             return string.encode('utf-8')
         else:
             return string
-    except NameError:
-        # python 3.x
+    elif six.PY3:
         return string
 
 
 def maybe_from_utf8(string):
     """Convert utf-8 input to unicode, leaving all other input alone."""
-    try:
-        # python 2.7
+    if six.PY2:
         if isinstance(string, str):
             return string.decode('utf-8')
         else:
             return string
-    except AttributeError:
-        # python 3.x
+    elif six.PY3:
         return string
 
 
