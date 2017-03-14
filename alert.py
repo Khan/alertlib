@@ -9,6 +9,7 @@ within Python.
 
 from __future__ import print_function
 import argparse
+import json
 import logging
 import sys
 
@@ -52,7 +53,9 @@ def setup_parser():
                               'May specify --severity and/or --summary. '
                               'May specify --chat-sender and/or '
                               '--icon-emoji or --icon-url '
-                              '(if omitted Slack determines automatically).'))
+                              '(if omitted Slack determines automatically).'
+                              'May specify --slack-simple-mesage or '
+                              '--slack-attachment.'))
     parser.add_argument('--mail', default=[], action=_MakeList,
                         help=('Send to KA email.  Argument is a comma-'
                               'separated list of usernames. '
@@ -112,7 +115,17 @@ def setup_parser():
                               '(default depends on severity)'))
     parser.add_argument('--notify', action='store_true', default=None,
                         help=('Cause a beep when sending to hipchat'))
-
+    parser.add_argument('--slack-intro', default=None,
+                        help=('If specified, text to put before the main '
+                              'text.  You can use @-alerts in the intro.'))
+    parser.add_argument('--slack-simple-message', action='store_true',
+                        default=False,
+                        help=('Pass message to slack using normal Markdown, '
+                              'rather than rendering it "attachment" style.'))
+    parser.add_argument('--slack-attachments', default='[]',
+                        help=('A list of slack attachment dicts, encoded as '
+                              'json. Replaces `message` for sending to slack. '
+                              '(See https://api.slack.com/docs/attachments.)'))
     parser.add_argument('--cc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
@@ -159,7 +172,10 @@ def alert(message, args):
 
     for channel in args.slack:
         a.send_to_slack(channel, sender=args.chat_sender,
-                        icon_url=args.icon_url, icon_emoji=args.icon_emoji)
+                        intro=args.slack_intro,
+                        icon_url=args.icon_url, icon_emoji=args.icon_emoji,
+                        simple_message=args.slack_simple_message,
+                        attachments=json.loads(args.slack_attachments))
 
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
