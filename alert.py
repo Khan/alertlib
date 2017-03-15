@@ -115,7 +115,7 @@ def setup_parser():
                               '(default depends on severity)'))
     parser.add_argument('--notify', action='store_true', default=None,
                         help=('Cause a beep when sending to hipchat'))
-    parser.add_argument('--slack-intro', default=None,
+    parser.add_argument('--slack-intro', default='',
                         help=('If specified, text to put before the main '
                               'text.  You can use @-alerts in the intro.'))
     parser.add_argument('--slack-simple-message', action='store_true',
