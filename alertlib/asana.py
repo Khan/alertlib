@@ -271,7 +271,7 @@ class Mixin(base.BaseMixin):
         # auto-generated is always the last tag
         tags.append('Auto generated')
 
-        task_name = self.summary or ('New Auto generated Asana task')
+        task_name = self._get_summary() or ('New Auto generated Asana task')
         # Task names ending with ':' become a section heading; so, remove it
         if task_name.endswith(':'):
             task_name = task_name[:-1]

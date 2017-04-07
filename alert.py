@@ -62,6 +62,13 @@ def setup_parser():
                               'May specify --summary as a subject line; '
                               'if missing we figure it out automatically. '
                               'May specify --cc and/or --bcc.'))
+    parser.add_argument('--asana', default=[], action=_MakeList,
+                        help=('Make an asana task.  Argument is a comma-'
+                              'separated list of asana project-names '
+                              '(e.g. "Engineering support".) '
+                              'May specify --asana-tags; '
+                              'may specify --cc as a list of asana email '
+                              'addresses to add followers.'))
     parser.add_argument('--pagerduty', default=[], action=_MakeList,
                         help=('Send to PagerDuty.  Argument is a comma-'
                               'separated list of PagerDuty services. '
@@ -126,6 +133,7 @@ def setup_parser():
                         help=('A list of slack attachment dicts, encoded as '
                               'json. Replaces `message` for sending to slack. '
                               '(See https://api.slack.com/docs/attachments.)'))
+
     parser.add_argument('--cc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
@@ -135,6 +143,9 @@ def setup_parser():
     parser.add_argument('--bcc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
+
+    parser.add_argument('--asana-tags', default=[], action=_MakeList,
+                        help=('A list of tags to tag this new task with'))
 
     parser.add_argument('--graphite_value', default=1, type=float,
                         help=('Value to send to graphite for each of the '
@@ -179,6 +190,9 @@ def alert(message, args):
 
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
+
+    for project in args.asana:
+        a.send_to_asana(project, tags=args.asana_tags, followers=args.cc)
 
     if args.pagerduty:
         a.send_to_pagerduty(args.pagerduty)
