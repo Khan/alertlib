@@ -724,7 +724,7 @@ class AsanaTest(TestBase):
 
         self.assertEqual([{'data':
                           {'followers': [],
-                           'name': 'New Auto generated Asana task',
+                           'name': 'test message',
                            'notes': 'test message',
                            'projects': expected_project_ids,
                            'tags': expected_tag_ids,
