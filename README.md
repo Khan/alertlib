@@ -64,6 +64,8 @@ slack_alertlib_webhook_url = "VALUE"
 asana_api_token = "VALUE"
 hipchat_alertlib_token = "VALUE"
 google_alertlib_service_account = '{}'
+sendgrid_username = "VALUE"
+sendgrid_password = "VALUE"
 ```
 
 You only need to include the secrets for the services you are using.

@@ -1,7 +1,8 @@
 """Mixin for send_to_email().
 
 This automatically sends using Google AppEngine email-sending in an
-appengine environment, or sendmail otherwise.
+appengine environment, or sendgrid if the sendgrid secrets are set, or
+sendmail otherwise.
 """
 
 from __future__ import absolute_import
@@ -17,6 +18,11 @@ except ImportError:
         import google_mail      # defined by alertlib_test.py
     except ImportError:
         pass
+
+try:
+    import sendgrid
+except ImportError:
+    pass
 
 try:
     import email
@@ -39,6 +45,35 @@ def _get_sender(sender):
 
 class Mixin(base.BaseMixin):
     """Mixin for send_to_email()."""
+    def _send_to_sendgrid(self, message, email_addresses, cc=None, bcc=None,
+                          sender=None):
+        username = (base.secret('sendgrid_low_priority_username') or
+                    base.secret('sendgrid_username'))
+        password = (base.secret('sendgrid_low_priority_password') or
+                    base.secret('sendgrid_password'))
+        assert username and password, "Can't find sendgrid username/password"
+        client = sendgrid.SendGridClient(username, password, raise_errors=True)
+
+        # The sendgrid API client auto-utf8-izes to/cc/bcc, but not
+        # subject/text.  Shrug.
+        msg = sendgrid.Mail(
+            subject=self._get_summary().encode('utf-8'),
+            to=email_addresses,
+            cc=cc,
+            bcc=bcc)
+        if self.html:
+            # TODO(csilvers): convert the html to text for 'body'.
+            # (see base.py about using html2text or similar).
+            msg.set_text(message.encode('utf-8'))
+            msg.set_html(message.encode('utf-8'))
+        else:
+            msg.set_text(message.encode('utf-8'))
+        # Can't be keyword arg because those don't parse "Name <email>"
+        # format.
+        msg.set_from(_get_sender(sender))
+
+        client.send(msg)
+
     def _send_to_gae_email(self, message, email_addresses, cc=None, bcc=None,
                            sender=None):
         gae_mail_args = {
@@ -93,14 +128,21 @@ class Mixin(base.BaseMixin):
         # Make sure the email text ends in a single newline.
         message = self.message.rstrip('\n') + '\n'
 
-        # Try sending to appengine first.
+        # Try using the sendgrid service first.
+        try:
+            self._send_to_sendgrid(message, email_addresses, cc, bcc, sender)
+            return
+        except (NameError, AssertionError) as why:
+            pass
+
+        # Then try sending via the appengine API.
         try:
             self._send_to_gae_email(message, email_addresses, cc, bcc, sender)
             return
         except (NameError, AssertionError) as why:
             pass
 
-        # Try using local smtp.
+        # Finally, try using local smtp.
         try:
             self._send_to_sendmail(message, email_addresses, cc, bcc, sender)
             return

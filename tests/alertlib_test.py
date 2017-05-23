@@ -14,9 +14,13 @@ import types
 import unittest
 import six
 
+try:
+    from unittest import mock
+except ImportError:
+    import mock
+
 import apiclient.errors
 import oauth2client
-import mock
 
 
 # Before we can import alertlib, we need to define a module 'secrets'
@@ -28,7 +32,14 @@ fake_secrets.hostedgraphite_api_key = '<hostedgraphite API key>'
 fake_secrets.slack_alertlib_webhook_url = '<slack webhook url>'
 fake_secrets.asana_api_token = '<asana api token>'
 fake_secrets.google_alertlib_service_account = "{}"
+fake_secrets.sendgrid_low_priority_username = "<sendgrid username>"
+fake_secrets.sendgrid_low_priority_password = "<sendgrid password>"
 sys.modules['secrets'] = fake_secrets
+
+# We also want sendgrid to work.
+fake_sendgrid = types.ModuleType('sendgrid')
+fake_sendgrid.__name__ = 'sendgrid'
+sys.modules['sendgrid'] = fake_sendgrid
 
 # And we want the google tests to work even without appengine installed.
 fake_google_mail = types.ModuleType('google_mail')
@@ -54,16 +65,33 @@ for module in ALERTLIB_MODULES:
 
 
 @contextlib.contextmanager
-def disable_google_mail():
+def force_use_of_google_mail():
+    """Takes advantage of the fact email tries sendgrid, then gae."""
+    def sendgrid_fail(*args, **kwargs):
+        raise AssertionError('sendgrid does not work!')
+
+    orig_send_to_sendgrid = alertlib.Alert._send_to_sendgrid
+    alertlib.Alert._send_to_sendgrid = sendgrid_fail
+    try:
+        yield
+    finally:
+        alertlib.Alert._send_to_sendgrid = orig_send_to_sendgrid
+
+
+@contextlib.contextmanager
+def force_use_of_sendmail():
     def google_mail_fail(*args, **kwargs):
         raise AssertionError('Google mail does not work!')
 
     orig_send_to_gae_email = alertlib.Alert._send_to_gae_email
+    orig_send_to_sendgrid = alertlib.Alert._send_to_sendgrid
     alertlib.Alert._send_to_gae_email = google_mail_fail
+    alertlib.Alert._send_to_sendgrid = google_mail_fail
     try:
         yield
     finally:
         alertlib.Alert._send_to_gae_email = orig_send_to_gae_email
+        alertlib.Alert._send_to_sendgrid = orig_send_to_sendgrid
 
 
 class MockResponse:
@@ -88,6 +116,7 @@ class TestBase(unittest.TestCase):
         self.sent_to_hipchat = []
         self.sent_to_slack = []
         self.sent_to_asana = []
+        self.sent_to_sendgrid = []
         self.sent_to_google_mail = []
         self.sent_to_sendmail = []
         self.sent_to_info_log = []
@@ -96,6 +125,23 @@ class TestBase(unittest.TestCase):
         self.sent_to_syslog = []
         self.sent_to_graphite = []
         self.sent_to_stackdriver = []
+
+        class FakeSendGridClient(object):
+            def __init__(*args, **kwargs):
+                pass
+
+            def send(_, msg):
+                self.sent_to_sendgrid.append(msg)
+
+        class FakeSendGridMail(dict):
+            def set_from(slf, sender):
+                slf['sender'] = sender
+
+            def set_text(slf, text):
+                slf['text'] = text
+
+            def set_html(slf, html):
+                slf['html'] = html
 
         class FakeSMTP(object):
             """We need to fake out the sendmail() and quit() methods."""
@@ -126,6 +172,9 @@ class TestBase(unittest.TestCase):
         self.mock(alertlib.email.google_mail, 'send_mail',
                   lambda **kwargs: self.sent_to_google_mail.append(kwargs))
 
+        self.mock(alertlib.email.sendgrid, 'SendGridClient',
+                  FakeSendGridClient)
+        self.mock(alertlib.email.sendgrid, 'Mail', FakeSendGridMail)
         self.mock(alertlib.email.smtplib, 'SMTP', FakeSMTP)
 
         self.mock(alertlib.logs.syslog, 'syslog',
@@ -1040,10 +1089,32 @@ class SlackTest(TestBase):
 
 
 class EmailTest(TestBase):
-    def test_google_mail(self):
+    def test_sendgrid_mail(self):
         alertlib.Alert('test message') \
-            .send_to_email('ka-admin') \
-            .send_to_pagerduty('oncall')
+                .send_to_email('ka-admin') \
+                .send_to_pagerduty('oncall')
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'test message',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None},
+                          {'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'test message',
+                           'to': ['oncall@khan-academy.pagerduty.com'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
+        self.assertEqual([], self.sent_to_google_mail)
+        self.assertEqual([], self.sent_to_sendmail)
+
+    def test_google_mail(self):
+        with force_use_of_google_mail():
+            alertlib.Alert('test message') \
+                    .send_to_email('ka-admin') \
+                    .send_to_pagerduty('oncall')
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1054,10 +1125,11 @@ class EmailTest(TestBase):
                            'subject': 'test message',
                            'to': ['oncall@khan-academy.pagerduty.com']}],
                          self.sent_to_google_mail)
+        self.assertEqual([], self.sent_to_sendgrid)
         self.assertEqual([], self.sent_to_sendmail)
 
     def test_sendmail(self):
-        with disable_google_mail():
+        with force_use_of_sendmail():
             alertlib.Alert('test message') \
                 .send_to_pagerduty('oncall') \
                 .send_to_email('ka-admin')
@@ -1084,14 +1156,27 @@ class EmailTest(TestBase):
                            ),
                           ],
                          self.sent_to_sendmail)
+        self.assertEqual([], self.sent_to_sendgrid)
         self.assertEqual([], self.sent_to_google_mail)
 
     def test_multiple_recipients(self):
         alertlib.Alert('test message').send_to_email(['ka-admin',
                                                       'ka-blackhole'])
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('test message').send_to_email(['ka-admin',
                                                           'ka-blackhole'])
+        with force_use_of_sendmail():
+            alertlib.Alert('test message').send_to_email(['ka-admin',
+                                                          'ka-blackhole'])
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'test message',
+                           'to': ['ka-admin@khanacademy.org',
+                                  'ka-blackhole@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1118,9 +1203,21 @@ class EmailTest(TestBase):
     def test_specified_hostname(self):
         alertlib.Alert('test message').send_to_email(
             'ka-admin@khanacademy.org')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('test message').send_to_email(
                 'ka-admin@khanacademy.org')
+        with force_use_of_sendmail():
+            alertlib.Alert('test message').send_to_email(
+                'ka-admin@khanacademy.org')
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'test message',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
+
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
                            'subject': 'test message',
@@ -1145,7 +1242,12 @@ class EmailTest(TestBase):
             alertlib.Alert('test message').send_to_email(
                 'ka-admin@appspot.org')
 
-        with disable_google_mail():
+        with force_use_of_google_mail():
+            with self.assertRaises(ValueError):
+                alertlib.Alert('test message').send_to_email(
+                    'ka-admin@appspot.org')
+
+        with force_use_of_sendmail():
             with self.assertRaises(ValueError):
                 alertlib.Alert('test message').send_to_email(
                     'ka-admin@appspot.org')
@@ -1155,11 +1257,26 @@ class EmailTest(TestBase):
             ['ka-admin', 'ka-blackhole'],
             cc='ka-cc',
             bcc=['ka-bcc', 'ka-hidden'])
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('test message').send_to_email(
                 ['ka-admin', 'ka-blackhole'],
                 cc='ka-cc',
                 bcc=['ka-bcc', 'ka-hidden'])
+        with force_use_of_sendmail():
+            alertlib.Alert('test message').send_to_email(
+                ['ka-admin', 'ka-blackhole'],
+                cc='ka-cc',
+                bcc=['ka-bcc', 'ka-hidden'])
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'test message',
+                           'to': ['ka-admin@khanacademy.org',
+                                  'ka-blackhole@khanacademy.org'],
+                           'cc': ['ka-cc@khanacademy.org'],
+                           'bcc': ['ka-bcc@khanacademy.org',
+                                   'ka-hidden@khanacademy.org']}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1194,9 +1311,22 @@ class EmailTest(TestBase):
         clean_sender = 'foo-123-bar'
         alertlib.Alert('test message').send_to_email(
             ['ka-admin', 'ka-blackhole'], sender=sender)
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('test message').send_to_email(
                 ['ka-admin', 'ka-blackhole'], sender=sender)
+        with force_use_of_sendmail():
+            alertlib.Alert('test message').send_to_email(
+                ['ka-admin', 'ka-blackhole'], sender=sender)
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': ('alertlib <no-reply+%s@khanacademy.org>'
+                                      % clean_sender),
+                           'subject': 'test message',
+                           'to': ['ka-admin@khanacademy.org',
+                                  'ka-blackhole@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': ('alertlib <no-reply+%s@khanacademy.org>'
@@ -1222,11 +1352,22 @@ class EmailTest(TestBase):
                          self.sent_to_sendmail)
 
     def test_error_severity(self):
-        alertlib.Alert('test message', severity=logging.ERROR).send_to_email(
-            'ka-admin')
-        with disable_google_mail():
+        alertlib.Alert('test message',
+                       severity=logging.ERROR).send_to_email('ka-admin')
+        with force_use_of_google_mail():
             alertlib.Alert('test message',
                            severity=logging.ERROR).send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert('test message',
+                           severity=logging.ERROR).send_to_email('ka-admin')
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'ERROR: test message',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1251,9 +1392,20 @@ class EmailTest(TestBase):
         # An explicit summary suppresses the 'ERROR: ' prefix.
         alertlib.Alert('test message', severity=logging.ERROR,
                        summary='a test...').send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('test message', severity=logging.ERROR,
                            summary='a test...').send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert('test message', severity=logging.ERROR,
+                           summary='a test...').send_to_email('ka-admin')
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'a test...',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1277,9 +1429,20 @@ class EmailTest(TestBase):
     def test_explicit_summary(self):
         alertlib.Alert('test message', summary='this is...').send_to_email(
             'ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('test message', summary='this is...').send_to_email(
                 'ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert('test message', summary='this is...').send_to_email(
+                'ka-admin')
+
+        self.assertEqual([{'text': 'test message\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'this is...',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'test message\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1303,8 +1466,18 @@ class EmailTest(TestBase):
     def test_implicit_summary_first_line(self):
         message = 'This text is short\nBut has multiple lines'
         alertlib.Alert(message).send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert(message).send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert(message).send_to_email('ka-admin')
+
+        self.assertEqual([{'text': message + '\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'This text is short',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': message + '\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1331,8 +1504,19 @@ class EmailTest(TestBase):
                    'but probably a long time a long time.\n'
                    'Finally, a second line!')
         alertlib.Alert(message).send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert(message).send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert(message).send_to_email('ka-admin')
+
+        self.assertEqual([{'text': message + '\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'This text is long, it is very very '
+                           'long, I cannot even say h',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': message + '\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1361,8 +1545,18 @@ class EmailTest(TestBase):
                    'Probably a long time a long time.\n'
                    'Finally, a second line!')
         alertlib.Alert(message).send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert(message).send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert(message).send_to_email('ka-admin')
+
+        self.assertEqual([{'text': message + '\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'This text is long',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': message + '\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1385,8 +1579,19 @@ class EmailTest(TestBase):
 
     def test_html_email(self):
         alertlib.Alert('<b>fire!</b>', html=True).send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('<b>fire!</b>', html=True).send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert('<b>fire!</b>', html=True).send_to_email('ka-admin')
+
+        self.assertEqual([{'text': '<b>fire!</b>\n',
+                           'html': '<b>fire!</b>\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': '',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': '<b>fire!</b>\n',
                            'html': '<b>fire!</b>\n',
@@ -1410,8 +1615,18 @@ class EmailTest(TestBase):
 
     def test_empty_message(self):
         alertlib.Alert('').send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('').send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert('').send_to_email('ka-admin')
+
+        self.assertEqual([{'text': '\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': '',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': '\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1434,8 +1649,18 @@ class EmailTest(TestBase):
 
     def test_extra_newlines(self):
         alertlib.Alert('yo!\n\n\n\n').send_to_email('ka-admin')
-        with disable_google_mail():
+        with force_use_of_google_mail():
             alertlib.Alert('yo!\n\n\n\n').send_to_email('ka-admin')
+        with force_use_of_sendmail():
+            alertlib.Alert('yo!\n\n\n\n').send_to_email('ka-admin')
+
+        self.assertEqual([{'text': 'yo!\n',
+                           'sender': 'alertlib <no-reply@khanacademy.org>',
+                           'subject': 'yo!',
+                           'to': ['ka-admin@khanacademy.org'],
+                           'cc': None,
+                           'bcc': None}],
+                         self.sent_to_sendgrid)
 
         self.assertEqual([{'body': 'yo!\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
@@ -1460,7 +1685,7 @@ class EmailTest(TestBase):
         if sys.version_info >= (3, 0):
             return
 
-        with disable_google_mail():
+        with force_use_of_sendmail():
             alertlib.Alert(u'yo \xf7', summary=u'yep \xf7') \
                 .send_to_pagerduty('oncall') \
                 .send_to_email('ka-admin')
@@ -1494,7 +1719,7 @@ class EmailTest(TestBase):
         if sys.version_info < (3, 0):
             return
 
-        with disable_google_mail():
+        with force_use_of_sendmail():
             alertlib.Alert(u'yo \xf7', summary=u'yep \xf7') \
                 .send_to_pagerduty('oncall') \
                 .send_to_email('ka-admin')
@@ -1526,7 +1751,8 @@ class EmailTest(TestBase):
 
 class PagerDutyTest(TestBase):
     def test_multiple_recipients(self):
-        alertlib.Alert('on fire!').send_to_pagerduty(['oncall', 'backup'])
+        with force_use_of_google_mail():
+            alertlib.Alert('on fire!').send_to_pagerduty(['oncall', 'backup'])
         self.assertEqual([{'body': 'on fire!\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
                            'subject': 'on fire!',
@@ -1541,8 +1767,9 @@ class PagerDutyTest(TestBase):
                 'oncall@khan-academy.pagerduty.com')
 
     def test_service_name_to_email(self):
-        alertlib.Alert('on fire!').send_to_pagerduty(
-            ['The oncall-service, at your service!'])
+        with force_use_of_google_mail():
+            alertlib.Alert('on fire!').send_to_pagerduty(
+                ['The oncall-service, at your service!'])
         self.assertEqual([{'body': 'on fire!\n',
                            'sender': 'alertlib <no-reply@khanacademy.org>',
                            'subject': 'on fire!',
@@ -1865,13 +2092,14 @@ class IntegrationTest(TestBase):
         # We send to hipchat a second time to make sure that
         # send_to_graphite() support chaining properly (by returning
         # self).
-        alertlib.Alert('test message') \
-            .send_to_hipchat('1s and 0s') \
-            .send_to_email('ka-admin') \
-            .send_to_pagerduty('oncall') \
-            .send_to_logs() \
-            .send_to_graphite('stats.alerted') \
-            .send_to_hipchat('test')
+        with force_use_of_google_mail():
+            alertlib.Alert('test message') \
+                    .send_to_hipchat('1s and 0s') \
+                    .send_to_email('ka-admin') \
+                    .send_to_pagerduty('oncall') \
+                    .send_to_logs() \
+                    .send_to_graphite('stats.alerted') \
+                    .send_to_hipchat('test')
 
         self.assertEqual([{'auth_token': '<hipchat token>',
                            'color': 'purple',
@@ -1913,13 +2141,14 @@ class IntegrationTest(TestBase):
     def test_test_mode(self):
         alertlib.enter_test_mode()
         try:
-            alertlib.Alert('test message') \
-                .send_to_hipchat('1s and 0s') \
-                .send_to_email('ka-admin') \
-                .send_to_pagerduty('oncall') \
-                .send_to_logs() \
-                .send_to_graphite('stats.alerted') \
-                .send_to_stackdriver('stats.test_mode')
+            with force_use_of_google_mail():
+                alertlib.Alert('test message') \
+                        .send_to_hipchat('1s and 0s') \
+                        .send_to_email('ka-admin') \
+                        .send_to_pagerduty('oncall') \
+                        .send_to_logs() \
+                        .send_to_graphite('stats.alerted') \
+                        .send_to_stackdriver('stats.test_mode')
         finally:
             alertlib.exit_test_mode()
 
@@ -1951,11 +2180,12 @@ class IntegrationTest(TestBase):
         """Make sure we put rate-limiting properly on each service."""
         alert = alertlib.Alert('test message', rate_limit=60)
         for _ in range(10):
-            alert.send_to_hipchat('1s and 0s') \
-                 .send_to_email('ka-admin') \
-                 .send_to_pagerduty('oncall') \
-                 .send_to_logs() \
-                 .send_to_graphite('stats.alerted')
+            with force_use_of_google_mail():
+                alert.send_to_hipchat('1s and 0s') \
+                     .send_to_email('ka-admin') \
+                     .send_to_pagerduty('oncall') \
+                     .send_to_logs() \
+                     .send_to_graphite('stats.alerted')
 
         # Should only log once
         self.assertEqual(1, len(self.sent_to_hipchat))
