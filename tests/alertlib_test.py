@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# TODO(colin): fix these lint errors (http://pep8.readthedocs.io/en/release-1.7.x/intro.html#error-codes)
-# pep8-disable:E128
 
 """Tests for alertlib/__init__.py."""
 import contextlib
@@ -1701,7 +1699,7 @@ class CallWithRetriesTest(TestBase):
 
     def test_expected_errors(self):
         error_types = [socket.error, six.moves.http_client.HTTPException,
-                oauth2client.client.Error]
+                       oauth2client.client.Error]
 
         for error_type in error_types:
             test_func = mock.Mock(side_effect=error_type('error'))
