@@ -1,5 +1,3 @@
-# TODO(colin): fix these lint errors (http://pep8.readthedocs.io/en/release-1.7.x/intro.html#error-codes)
-# pep8-disable:E127,E129
 """Mixin for send_to_stackdriver()."""
 
 from __future__ import absolute_import
@@ -60,7 +58,7 @@ def _call_stackdriver_with_retries(fn, num_retries=9, wait_time=0.5):
             code = int(e.resp['status'])
             if (code == 500 and
                 'One or more of the points specified was older than the most '
-                'recent stored point' in str(e)):
+                    'recent stored point' in str(e)):
                 # This can happen when writing data that has already been
                 # written. In practice this occurs when retrying after there
                 # is an internal error in stackdriver when uploading data. Some
@@ -71,14 +69,14 @@ def _call_stackdriver_with_retries(fn, num_retries=9, wait_time=0.5):
             elif code == 403 or code >= 500:     # 403: rate-limiting probably
                 pass
             elif (code == 400 and
-                      'Timeseries data must be more recent' in str(e)):
+                  'Timeseries data must be more recent' in str(e)):
                 # This error just means we uploaded the same data
                 # twice by accident (probably because the first time
                 # the connection to google died before we got their ACK).
                 # We just pretend the call magically succeeded.
                 return
             elif (code == 400 and
-                      'One or more TimeSeries could not be written' in str(e)):
+                  'One or more TimeSeries could not be written' in str(e)):
                 # This can happen if the timestamp that we give is a little
                 # bit in the future according to google (due to clock skew?)
                 # We just wait a little bit and try again.
