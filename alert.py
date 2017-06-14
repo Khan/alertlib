@@ -16,6 +16,7 @@ import sys
 import alertlib
 import alertlib.graphite
 import alertlib.stackdriver
+import alertlib.alerta
 
 
 DEFAULT_SEVERITY = logging.INFO
@@ -78,16 +79,23 @@ def setup_parser():
                         help=('Send to syslog.  May specify --severity.'))
     parser.add_argument('--graphite', default=[], action=_MakeList,
                         help=('Send to graphite.  Argument is a comma-'
-                              'separted list of statistics to update. '
+                              'separated list of statistics to update. '
                               'May specify --graphite_value and '
                               '--graphite_host.'))
 
     parser.add_argument('--stackdriver', default=[], action=_MakeList,
                         help=('Send to Stackdriver.  Argument is a comma-'
-                              'separted list of metrics to update, with '
+                              'separated list of metrics to update, with '
                               'metric-label-values separated by pipes like so:'
                               ' `logs.500|module=i18n`. '
                               'May specify --stackdriver_value'))
+
+    parser.add_argument('--aggregator', default=[], action=_MakeList,
+                        help=('Send to aggregator such as Alerta.io. Argument'
+                              'is comma-separated list of initiatives.'
+                              'Must specify --aggregator-resource and '
+                              '--aggregator-event-name and may specify '
+                              '--severity and/or --summary'))
 
     parser.add_argument('--summary', default=None,
                         help=('Summary used as subject lines for emails, etc. '
@@ -171,6 +179,18 @@ def setup_parser():
     parser.add_argument('-n', '--dry-run', action='store_true',
                         help=("Just log what we would do, but don't do it"))
 
+    parser.add_argument('--aggregator-resource', default=None, choices=sorted(
+                        alertlib.alerta.MAP_RESOURCE_TO_ENV_SERVICE_AND_GROUP),
+                        help=('Name of resource where alert originated to '
+                              'send to aggregator. Only relevent when used '
+                              'in conjunction with --aggregator. Choices '
+                              'include: jenkins, mobile, test, toby, webapp'))
+
+    parser.add_argument('--aggregator-event-name', default=None,
+                        help=('Name of the event for use by aggregator. '
+                              '(e.g. ServiceDown, Error) Only relevent when '
+                              'used in conjunction with --aggregator.'))
+
     return parser
 
 
@@ -212,6 +232,13 @@ def alert(message, args):
                               metric_labels=metric_labels,
                               project=args.stackdriver_project,
                               ignore_errors=False)
+
+    # subject to change if we decide go the route of having an alert 
+    # be exclusive to just one initiative
+    for initiative in args.aggregator:
+        a.send_to_alerta(initiative,
+                         resource=args.aggregator_resource,
+                         event=args.aggregator_event_name)
 
 
 def main(argv):

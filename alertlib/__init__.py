@@ -12,6 +12,7 @@ USAGE:
        .send_to_pagerduty(...)
        .send_to_logs(...)
        .send_to_graphite(...)
+       .send_to_alerta(...)
 
 or, if you don't like chaining:
    alert = alertlib.Alert("message")
@@ -27,6 +28,7 @@ The backends supported are:
     * KA Asana tasks
     * KA email
     * KA PagerDuty account
+    * KA Alerta account
     * Logs -- GAE logs on appengine, or syslogs on a unix box
     * Graphite -- update a counter to indicate this alert happened
 
@@ -35,13 +37,13 @@ You can send an alert to one or more of these.
 Some advice on how to choose:
 
 * Are you alerting about something that needs to be fixed?  Send it to
-  PagerDuty, which is the only one of these that keeps track of
-  whether a problem is fixed or not.
+  PagerDuty, which keeps track of whether a problem is fixed or not,
+  and send it to Alerta, which compiles a dashboard of what's broken.
 
 * Are you alerting about something you want people to know about right
   away?  Send it to an email role account that forward to those
-  people, or send a HipChat/Slack message that mentions those people
-  with @name.
+  people, send a HipChat/Slack message that mentions those people
+  with @name, and post it to Alerta so it makes it to the dashboard.
 
 * Are you alerting about something that is nice-to-know?  ("Regular
   cron task X has finished" often falls into this category.)  Send it
@@ -63,6 +65,7 @@ from . import pagerduty      # send_to_pagerduty()
 from . import logs           # send_to_logs()
 from . import graphite       # send_to_graphite()
 from . import stackdriver    # send_to_stackdriver()
+from . import alerta         # send_to_alerta()
 
 
 class Alert(hipchat.Mixin,
@@ -73,6 +76,7 @@ class Alert(hipchat.Mixin,
             logs.Mixin,
             graphite.Mixin,
             stackdriver.Mixin,
+            alerta.Mixin,
             BaseMixin):
     """An alert message that can be sent to multiple destinations."""
     # BaseMixin defines __init__.

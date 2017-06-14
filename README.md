@@ -13,6 +13,7 @@ alert to any or all of:
   * GAE logs and/or syslog
   * Graphite/StatsD
   * Stackdriver (also known as Google Cloud Monitoring)
+  * Alerta (alerting aggregator)
 
 You must provide a decrypted `secrets.py` (from the webapp repo) to use
 these services.
@@ -49,8 +50,9 @@ alertlib.Alert("It's time for a walk!")                 \
    .send_to_email("dogs-all", cc=["toby","fleetwood"])  \
    .send_to_pagerduty(...)                              \
    .send_to_logs(...)                                   \
-   .send_to_graphite(...)
-   .send_to_stackdriver(...)
+   .send_to_graphite(...)                               \
+   .send_to_stackdriver(...)                            \
+   .send_to_aggregator(...)
 ```
 
 ### Secrets
@@ -66,6 +68,7 @@ hipchat_alertlib_token = "VALUE"
 google_alertlib_service_account = '{}'
 sendgrid_username = "VALUE"
 sendgrid_password = "VALUE"
+alerta_api_key = "VALUE"
 ```
 
 You only need to include the secrets for the services you are using.

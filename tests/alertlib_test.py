@@ -34,6 +34,7 @@ fake_secrets.asana_api_token = '<asana api token>'
 fake_secrets.google_alertlib_service_account = "{}"
 fake_secrets.sendgrid_low_priority_username = "<sendgrid username>"
 fake_secrets.sendgrid_low_priority_password = "<sendgrid password>"
+fake_secrets.alerta_api_key = '<alerta api key>'
 sys.modules['secrets'] = fake_secrets
 
 # We also want sendgrid to work.
@@ -51,6 +52,7 @@ sys.path.insert(0, '.')
 import alertlib
 
 ALERTLIB_MODULES = (
+    'alerta',
     'asana',
     'email',
     'graphite',
@@ -125,6 +127,7 @@ class TestBase(unittest.TestCase):
         self.sent_to_syslog = []
         self.sent_to_graphite = []
         self.sent_to_stackdriver = []
+        self.sent_to_alerta = []
 
         class FakeSendGridClient(object):
             def __init__(*args, **kwargs):
@@ -186,6 +189,9 @@ class TestBase(unittest.TestCase):
         self.mock(alertlib.stackdriver, 'send_datapoints_to_stackdriver',
                   lambda data, *a, **kw: (
                       self.sent_to_stackdriver.extend(data)))
+
+        self.mock(alertlib.alerta, '_make_alerta_api_call',
+                  lambda payload: self.sent_to_alerta.append(payload))
 
         for module in ALERTLIB_MODULES:
             alertlib_module = getattr(alertlib, module)
@@ -1907,6 +1913,67 @@ class StackdriverTest(TestBase):
         return sent_points[0]
 
 
+class AlertaTest(TestBase):
+
+    def test_specified_options_no_severity(self):
+        alertlib.Alert('test').send_to_alerta(initiative='infrastructure',
+                                              resource='test',
+                                              event='Test')
+        actual = json.loads(self.sent_to_alerta[0])
+        self.assertEqual(actual['resource'], 'test')
+        self.assertEqual(actual['event'], 'Test')
+        self.assertEqual(actual['environment'], 'Development')
+        self.assertEqual(actual['severity'], 'informational')
+        self.assertEqual(actual['service'], ['Test'])
+        self.assertEqual(actual['group'], 'test')
+        self.assertEqual(actual['text'], 'test')
+        self.assertEqual(actual['attributes']['initiative'], 'infrastructure')
+
+    def test_specified_options_with_severity(self):
+
+        # This one passes when including sample text in the summary but not
+        # the message param? Not sure why, as the message param successfully
+        # captures the text in the test above.
+        alert = alertlib.Alert('test', summary='sample_text',
+                               severity=logging.ERROR)
+        alert.send_to_alerta(initiative='infrastructure',
+                             resource='test',
+                             event='Test')
+        actual = json.loads(self.sent_to_alerta[0])
+        self.assertEqual(actual['resource'], 'test')
+        self.assertEqual(actual['event'], 'Test')
+        self.assertEqual(actual['environment'], 'Development')
+        self.assertEqual(actual['severity'], 'major')
+        self.assertEqual(actual['service'], ['Test'])
+        self.assertEqual(actual['group'], 'test')
+        self.assertEqual(actual['text'], 'sample_text')
+        self.assertEqual(actual['attributes']['initiative'], 'infrastructure')
+
+    # Under discussion how we want mixin to respond if missing any of
+    # the info below. Tried the following error msg/logging approach below.
+    def test_no_resource_provided(self):
+        alertlib.Alert('test').send_to_alerta(initiative='infrastructure',
+                                              event='Test')
+        self.assertEqual([], self.sent_to_alerta)
+
+        expected_error_log = [('Resource must be provided. '
+                               'Failed to send to aggregator.',)]
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_no_event_provided(self):
+        alertlib.Alert('test').send_to_alerta(initiative='infrastructure',
+                                              resource='test')
+        self.assertEqual([], self.sent_to_alerta)
+
+        expected_error_log = [('Event name must be provided. '
+                               'Failed to send to aggregator.',)]
+        self.assertEqual(expected_error_log,
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+
 class CallWithRetriesTest(TestBase):
 
     class MockHttpResponse:
@@ -2099,6 +2166,7 @@ class IntegrationTest(TestBase):
                     .send_to_pagerduty('oncall') \
                     .send_to_logs() \
                     .send_to_graphite('stats.alerted') \
+                    .send_to_alerta('test', 'test', 'test') \
                     .send_to_hipchat('test')
 
         self.assertEqual([{'auth_token': '<hipchat token>',
@@ -2137,6 +2205,16 @@ class IntegrationTest(TestBase):
                          self.sent_to_graphite)
 
         self.assertEqual([], self.sent_to_stackdriver)
+
+        self.assertEqual(['{"environment": "Development", '
+                          '"resource": "test", '
+                          '"severity": "informational", '
+                          '"service": ["Test"], '
+                          '"text": "test message", '
+                          '"group": "test", '
+                          '"attributes": {"initiative": "test"}, '
+                          '"event": "test"}'],
+                         self.sent_to_alerta)
 
     def test_test_mode(self):
         alertlib.enter_test_mode()
