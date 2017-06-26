@@ -71,7 +71,9 @@ sendgrid_password = "VALUE"
 alerta_api_key = "VALUE"
 ```
 
-You only need to include the secrets for the services you are using.
+You only need to include the secrets for the services you are using.  If you set
+the environment variable `ALERTLIB_SECRETS_DIR`, alertlib will look for
+`secrets.py` in that directory, and will exit if it's not found.
 
 ### HTML formatting (for HipChat and email)
 Alert messages may contain HTML markup if you set the `html=True` parameter on

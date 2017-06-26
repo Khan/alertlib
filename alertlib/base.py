@@ -20,18 +20,31 @@ See graphite.py for a simple example.
 """
 
 import logging
+import os
 import six
+import sys
 import time
 
-try:
-    # KA-specific hack: shared.ka_secrets is a superset of secrets.
+# We accept secrets.py either in the current directory, or in another directory
+# if this envvar is set.  If the envvar is set, we require that secrets exist;
+# otherwise we fall back to running without secrets.
+SECRETS_DIR_ENVVAR = 'ALERTLIB_SECRETS_DIR'
+
+if SECRETS_DIR_ENVVAR in os.environ:
+    sys.path.insert(0, os.environ[SECRETS_DIR_ENVVAR])
+    import secrets
+else:
     try:
-        import shared.ka_secrets as secrets
+        # KA-specific hack: ka_secrets is a superset of secrets.
+        # TODO(benkraft): remove this once all callers have moved to specifying
+        # ALERTLIB_SECRETS_DIR, hopefully by August 2017.
+        try:
+            import shared.ka_secrets as secrets
+        except ImportError:
+            import secrets
     except ImportError:
-        import secrets
-except ImportError:
-    # You won't be able to do any alerting that requires a secret
-    secrets = None
+        # You won't be able to do any alerting that requires a secret
+        secrets = None
 
 
 _TEST_MODE = False
