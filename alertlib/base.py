@@ -35,13 +35,7 @@ if SECRETS_DIR_ENVVAR in os.environ:
     import secrets
 else:
     try:
-        # KA-specific hack: ka_secrets is a superset of secrets.
-        # TODO(benkraft): remove this once all callers have moved to specifying
-        # ALERTLIB_SECRETS_DIR, hopefully by August 2017.
-        try:
-            import shared.ka_secrets as secrets
-        except ImportError:
-            import secrets
+        import secrets
     except ImportError:
         # You won't be able to do any alerting that requires a secret
         secrets = None
