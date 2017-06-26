@@ -31,8 +31,12 @@ import time
 SECRETS_DIR_ENVVAR = 'ALERTLIB_SECRETS_DIR'
 
 if SECRETS_DIR_ENVVAR in os.environ:
-    sys.path.insert(0, os.environ[SECRETS_DIR_ENVVAR])
-    import secrets
+    try:
+        sys.path.insert(0, os.environ[SECRETS_DIR_ENVVAR])
+        import secrets
+    finally:
+        # Clean up the path, so we don't pollute it for others.
+        sys.path.pop(0)
 else:
     try:
         import secrets
