@@ -24,9 +24,9 @@ import six
 import time
 
 try:
-    # KA-specific hack: ka_secrets is a superset of secrets.
+    # KA-specific hack: shared.ka_secrets is a superset of secrets.
     try:
-        import ka_secrets as secrets
+        import shared.ka_secrets as secrets
     except ImportError:
         import secrets
 except ImportError:
