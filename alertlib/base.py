@@ -30,19 +30,15 @@ import time
 # otherwise we fall back to running without secrets.
 SECRETS_DIR_ENVVAR = 'ALERTLIB_SECRETS_DIR'
 
-if SECRETS_DIR_ENVVAR in os.environ:
-    try:
-        sys.path.insert(0, os.environ[SECRETS_DIR_ENVVAR])
-        import secrets
-    finally:
-        # Clean up the path, so we don't pollute it for others.
-        sys.path.pop(0)
-else:
-    try:
-        import secrets
-    except ImportError:
-        # You won't be able to do any alerting that requires a secret
-        secrets = None
+try:
+    sys.path.insert(0, os.environ.get(SECRETS_DIR_ENVVAR, '.'))
+    import secrets
+except ImportError:
+    # You won't be able to do any alerting that requires a secret
+    secrets = None
+finally:
+    # Clean up the path, so we don't pollute it for others.
+    sys.path.pop(0)
 
 
 _TEST_MODE = False
