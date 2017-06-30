@@ -9,3 +9,6 @@ check:
 	   echo "------ $$f PYTHON2" && env PYTHONPATH=${GOOGLE_API_CLIENT_DIR}:${APPENGINE_DIR}:$$PYTHONPATH python2 "$$f" && \
 	   echo "------ $$f PYTHON3" && env PYTHONPATH=${GOOGLE_API_CLIENT_DIR}:${PYTHONPATH}::$$PYTHONPATH python3 "$$f"; \
 	done
+
+deps:
+	pip install -r requirements.txt
