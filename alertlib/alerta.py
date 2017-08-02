@@ -74,7 +74,9 @@ _SEVERITY_TO_ALERTA_FORMAT = {
     logging.CRITICAL: 'critical',
     logging.ERROR: 'major',
     logging.WARNING: 'warning',
-    logging.INFO: 'informational',
+    # Cleared is used here rather than normal/informational/ok so an existing
+    # error alert will be closed, but new alert will not be opened.
+    logging.INFO: 'cleared',
     logging.DEBUG: 'debug',
     logging.NOTSET: 'unknown',  # Should not be used if avoidable
 }

@@ -1923,7 +1923,7 @@ class AlertaTest(TestBase):
         self.assertEqual(actual['resource'], 'test')
         self.assertEqual(actual['event'], 'Test')
         self.assertEqual(actual['environment'], 'Development')
-        self.assertEqual(actual['severity'], 'informational')
+        self.assertEqual(actual['severity'], 'cleared')
         self.assertEqual(actual['service'], ['Test'])
         self.assertEqual(actual['group'], 'test')
         self.assertEqual(actual['text'], 'test')
@@ -2208,7 +2208,7 @@ class IntegrationTest(TestBase):
 
         self.assertEqual(['{"environment": "Development", '
                           '"resource": "test", '
-                          '"severity": "informational", '
+                          '"severity": "cleared", '
                           '"service": ["Test"], '
                           '"text": "test message", '
                           '"group": "test", '
