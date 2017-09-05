@@ -104,7 +104,7 @@ class Mixin(base.BaseMixin):
 
         else:                                       # "alertlib style" case
             color = self._mapped_severity(_LOG_PRIORITY_TO_SLACK_COLOR)
-            fallback = ("{}\n{}".format(self.summary, message)
+            fallback = ("%s\n%s" % (self.summary, message)
                         if self.summary else message)
             attachment = {
                 "text": message,
