@@ -1896,6 +1896,45 @@ class StackdriverTest(TestBase):
                          self.sent_to_error_log)
         self.sent_to_error_log = []
 
+    def test_sanitizes_errors(self):
+        # This is not a perfect test since I mock out the error text, so
+        # if google changes it we won't notice.
+        _request_json = json.dumps({
+            "body": "{\"timeSeries\": [], \"startTime\": \"now\"\}",
+            "resumable_uri": None,
+            "headers": {"content-length": "284",
+                        "content-type": "application/json",
+                        "Authorization": "Bearer sekretsekretsekret",
+                        },
+            "method": "POST",
+        })
+
+        class CloudAuthError(Exception):
+            def __init__(self, msg):
+                super(CloudAuthError, self).__init__(msg)
+                self.content = {'error': {'code': 400, 'status': "INVALID"}}
+
+        def cloud_auth_error():
+            raise CloudAuthError("Error")
+
+        self.unmock(alertlib.stackdriver, 'send_datapoints_to_stackdriver')
+        client_mock = mock.Mock()
+        (client_mock.return_value.projects.return_value.timeSeries.
+         return_value.create.return_value.to_json.return_value) = _request_json
+        self.mock(alertlib.stackdriver, '_get_google_apiclient', client_mock)
+
+        self.mock(alertlib.stackdriver, '_call_stackdriver_with_retries',
+                  lambda *a, **kw: cloud_auth_error())
+
+        with self.assertRaises(CloudAuthError):
+            self.alert.send_to_stackdriver('stats.test_message', 4,
+                                           ignore_errors=False)
+        self.assertEqual(1, len(self.sent_to_error_log))
+        self.assertIn('"Authorization": "xxxxxx", ',
+                      self.sent_to_error_log[0][0])
+
+        self.sent_to_error_log = []
+
     def _get_sent_timeseries_data(self):
         self.assertEqual(1, len(self.sent_to_stackdriver))
         sent_data = self.sent_to_stackdriver[0]

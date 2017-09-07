@@ -165,8 +165,13 @@ def send_datapoints_to_stackdriver(timeseries_data,
         # cloud-monitoring API seems to put more content
         # in 'content'.
         if hasattr(e, 'content') and hasattr(request, 'to_json'):
+            request_text = str(request.to_json())
+            # Get rid of any auth info in the request.
+            request_text = re.sub(r'"Authorization":[^,]*,\s*',
+                                  '"Authorization": "xxxxxx", ',
+                                  request_text)
             msg = ('CLOUD-MONITORING ERROR sending %s: %s'
-                   % (request.to_json(), e.content))
+                   % (request_text, e.content))
         else:
             msg = 'cloud-monitoring error, not sending some data'
         if ignore_errors:
