@@ -74,9 +74,7 @@ _SEVERITY_TO_ALERTA_FORMAT = {
     logging.CRITICAL: 'critical',
     logging.ERROR: 'major',
     logging.WARNING: 'warning',
-    # Cleared is used here rather than normal/informational/ok so an existing
-    # error alert will be closed, but new alert will not be opened.
-    logging.INFO: 'cleared',
+    logging.INFO: 'informational',
     logging.DEBUG: 'debug',
     logging.NOTSET: 'unknown',  # Should not be used if avoidable
 }
@@ -113,15 +111,17 @@ def _post_to_alerta(payload_json):
 class Mixin(base.BaseMixin):
     """Mixin for send_to_alerta()."""
 
-    def send_to_alerta(self,
-                       initiative,
-                       resource=None,
-                       event=None):
+    # TODO(amos): set resolve default to False once all the calllers of this
+    # method that want this behavior are upated to specify it as true. Also at
+    # that time change default so that it doesn't require that the severity be
+    # logging.INFO since that guard won't be needed anymore.
+    def send_to_alerta(self, initiative, resource=None, event=None,
+                       resolve=True, timeout=None):
         """Sends alert to Alerta.
 
         This is intended to be used for more urgent 'things are broken'
-        alerts. In the case of KA, Alerta (alerta.io) is serving the purpose of 
-        aggregating alerts from multiple sources. The API used to interface 
+        alerts. In the case of KA, Alerta (alerta.io) is serving the purpose of
+        aggregating alerts from multiple sources. The API used to interface
         with dashboard can be accessed via endpoints found on api.alerta.io/.
 
         Arguments:
@@ -135,6 +135,15 @@ class Mixin(base.BaseMixin):
                 e.g. 'webapp' or 'jenkins'
             event: Event name
                 e.g. 'ServiceDown' or 'Errors'
+            resolve: Clear the alert. Currently this option requires that the
+                severity is logging.INFO in order to make existing calls to
+                this method that expect resolve behavior on info alters to
+                continue to work. Use this to make alerts disappear from the
+                Alerta dashboard once they are resolved.
+            timeout: A timeout in seconds. If not provided, then the alert
+               will use the default timeout. All alerts are expired (and
+               disappear from the dashboard) after they timeout. By default
+               alerts timeout after 24 hours.
         """
 
         if not self._passed_rate_limit('aggregator'):
@@ -155,6 +164,8 @@ class Mixin(base.BaseMixin):
         service = resource_classifiers['service']
         group = resource_classifiers['group']
         severity = _SEVERITY_TO_ALERTA_FORMAT[self.severity]
+        if resolve and self.severity == logging.INFO:
+            severity = 'cleared'
         text = self._get_summary().encode('utf-8')
         # additional custom key: value pairs should be added to attributes
         attributes = {"initiative": initiative}
@@ -168,6 +179,8 @@ class Mixin(base.BaseMixin):
                    "text": text,
                    "attributes": attributes,
                    }
+        if timeout:
+            payload['timeout'] = timeout
 
         payload_json = json.dumps(payload)
 

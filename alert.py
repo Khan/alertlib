@@ -191,6 +191,27 @@ def setup_parser():
                               '(e.g. ServiceDown, Error) Only relevent when '
                               'used in conjunction with --aggregator.'))
 
+    parser.add_argument('--aggregator-timeout', default=None, type=int,
+                        help='Timeout in seconds before alert is '
+                        'automatically resolved. If not specified then the '
+                        'default aggregator timeout is used.')
+
+    parser.add_argument('--aggregator-resolve', dest='aggregator_resolve',
+                        action='store_true',
+                        help='Resolve this alert in the aggregator. '
+                        'This will clear the alert from the Alerta dashboard.')
+
+    parser.add_argument('--no-aggregator-resolve', dest='aggregator_resolve',
+                        action='store_false',
+                        help='Do not resolve this alert in the aggregator. '
+                        'This will make the alert not be cleared from the '
+                        'Alerta dashboard.')
+
+    # TODO(amos): make default for aggregator_resolve be false once we verify
+    # that all uses of this script that want to resolve info alerts are updated
+    # to calling that out explictly using the flag.
+    parser.set_defaults(aggregator_resolve=True)
+
     return parser
 
 
@@ -238,7 +259,9 @@ def alert(message, args):
     for initiative in args.aggregator:
         a.send_to_alerta(initiative,
                          resource=args.aggregator_resource,
-                         event=args.aggregator_event_name)
+                         event=args.aggregator_event_name,
+                         timeout=args.aggregator_timeout,
+                         resolve=args.aggregator_resolve)
 
 
 def main(argv):
