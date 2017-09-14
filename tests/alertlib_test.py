@@ -1962,7 +1962,7 @@ class AlertaTest(TestBase):
         self.assertEqual(actual['resource'], 'test')
         self.assertEqual(actual['event'], 'Test')
         self.assertEqual(actual['environment'], 'Development')
-        self.assertEqual(actual['severity'], 'cleared')
+        self.assertEqual(actual['severity'], 'informational')
         self.assertEqual(actual['service'], ['Test'])
         self.assertEqual(actual['group'], 'test')
         self.assertEqual(actual['text'], 'test')
@@ -1987,6 +1987,26 @@ class AlertaTest(TestBase):
         self.assertEqual(actual['group'], 'test')
         self.assertEqual(actual['text'], 'sample_text')
         self.assertEqual(actual['attributes']['initiative'], 'infrastructure')
+
+    def test_resolve(self):
+        alert = alertlib.Alert('test', summary='sample_text',
+                               severity=logging.ERROR)
+        alert.send_to_alerta(initiative='infrastructure',
+                             resource='test',
+                             event='Test',
+                             resolve=True)
+        actual = json.loads(self.sent_to_alerta[0])
+        self.assertEqual(actual['severity'], 'cleared')
+
+    def test_timeout(self):
+        alert = alertlib.Alert('test', summary='sample_text',
+                               severity=logging.ERROR)
+        alert.send_to_alerta(initiative='infrastructure',
+                             resource='test',
+                             event='Test',
+                             timeout=60)
+        actual = json.loads(self.sent_to_alerta[0])
+        self.assertEqual(actual['timeout'], 60)
 
     # Under discussion how we want mixin to respond if missing any of
     # the info below. Tried the following error msg/logging approach below.
@@ -2247,7 +2267,7 @@ class IntegrationTest(TestBase):
 
         self.assertEqual(['{"environment": "Development", '
                           '"resource": "test", '
-                          '"severity": "cleared", '
+                          '"severity": "informational", '
                           '"service": ["Test"], '
                           '"text": "test message", '
                           '"group": "test", '

@@ -201,16 +201,7 @@ def setup_parser():
                         help='Resolve this alert in the aggregator. '
                         'This will clear the alert from the Alerta dashboard.')
 
-    parser.add_argument('--no-aggregator-resolve', dest='aggregator_resolve',
-                        action='store_false',
-                        help='Do not resolve this alert in the aggregator. '
-                        'This will make the alert not be cleared from the '
-                        'Alerta dashboard.')
-
-    # TODO(amos): make default for aggregator_resolve be false once we verify
-    # that all uses of this script that want to resolve info alerts are updated
-    # to calling that out explictly using the flag.
-    parser.set_defaults(aggregator_resolve=True)
+    parser.set_defaults(aggregator_resolve=False)
 
     return parser
 
