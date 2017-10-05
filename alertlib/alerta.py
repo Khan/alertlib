@@ -159,7 +159,7 @@ class Mixin(base.BaseMixin):
         severity = _SEVERITY_TO_ALERTA_FORMAT[self.severity]
         if resolve:
             severity = 'cleared'
-        text = self._get_summary().encode('utf-8')
+        text = self._get_summary()
         # additional custom key: value pairs should be added to attributes
         attributes = {"initiative": initiative}
 
@@ -175,7 +175,7 @@ class Mixin(base.BaseMixin):
         if timeout:
             payload['timeout'] = timeout
 
-        payload_json = json.dumps(payload)
+        payload_json = json.dumps(payload, encoding='utf-8')
 
         if self._in_test_mode():
             logging.info("alertlib: would send to aggregator: %s"
