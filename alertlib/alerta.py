@@ -175,7 +175,7 @@ class Mixin(base.BaseMixin):
         if timeout:
             payload['timeout'] = timeout
 
-        payload_json = json.dumps(payload, encoding='utf-8')
+        payload_json = json.dumps(payload, ensure_ascii=False).encode('utf-8')
 
         if self._in_test_mode():
             logging.info("alertlib: would send to aggregator: %s"
