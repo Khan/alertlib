@@ -39,6 +39,7 @@ _ENV_DEV = 'Development'
 _SERVICE_KA = 'Khanacademy.org'
 _SERVICE_DEPLOY = 'Deployment'
 _SERVICE_WEBSERVER = 'Internal Webserver'
+_SERVICE_KHANALYTICS = 'Khanalytics'
 _SERVICE_TEST = 'Test'
 _GROUP_WEB = 'web'
 _GROUP_MOBILE = 'mobile'
@@ -64,6 +65,10 @@ MAP_RESOURCE_TO_ENV_SERVICE_AND_GROUP = {
              'service': [_SERVICE_WEBSERVER],
              'group': _GROUP_TOOLS,
              },
+    'khanalytics': {'env': _ENV_PROD,
+                    'service': [_SERVICE_KHANALYTICS],
+                    'group': _GROUP_TOOLS,
+                    },
     'test': {'env': _ENV_DEV,
              'service': [_SERVICE_TEST],
              'group': _GROUP_TEST,
