@@ -39,6 +39,8 @@ _ENV_DEV = 'Development'
 _SERVICE_KA = 'Khanacademy.org'
 _SERVICE_DEPLOY = 'Deployment'
 _SERVICE_WEBSERVER = 'Internal Webserver'
+_SERVICE_INTERNAL_SERVICES = 'Internal Services'
+_SERVICE_YOUTUBE_EXPORT = "Youtube Export"
 _SERVICE_KHANALYTICS = 'Khanalytics'
 _SERVICE_TEST = 'Test'
 _GROUP_WEB = 'web'
@@ -65,6 +67,14 @@ MAP_RESOURCE_TO_ENV_SERVICE_AND_GROUP = {
              'service': [_SERVICE_WEBSERVER],
              'group': _GROUP_TOOLS,
              },
+    'youtube-export': {'env': _ENV_PROD,
+                       'service': [_SERVICE_YOUTUBE_EXPORT],
+                       'group': _GROUP_TOOLS,
+                       },
+    'internal-services': {'env': _ENV_PROD,
+                          'service': [_SERVICE_INTERNAL_SERVICES],
+                          'group': _GROUP_TOOLS,
+                          },
     'khanalytics': {'env': _ENV_PROD,
                     'service': [_SERVICE_KHANALYTICS],
                     'group': _GROUP_TOOLS,
