@@ -47,6 +47,7 @@ _SERVICE_CACHING_PROXY = 'Caching Proxy'
 _SERVICE_DOMAIN_REDIRECT = 'Domain Redirect'
 _SERVICE_PRODUCTION_RPC_SERVERS = 'Production RPC Servers'
 _SERVICE_PHABRICATOR = 'Phabricator'
+_SERVICE_UNKNOWN = 'Unknown'
 _SERVICE_TEST = 'Test'
 _GROUP_WEB = 'web'
 _GROUP_MOBILE = 'mobile'
@@ -104,6 +105,11 @@ MAP_RESOURCE_TO_ENV_SERVICE_AND_GROUP = {
                     'service': [_SERVICE_PHABRICATOR],
                     'group': _GROUP_TOOLS,
                     },
+    # used in aws-config:shared/usr/local/bin/cron_with_output
+    'unknown-ec2-instance': {'env': _ENV_DEV,
+                             'service': [_SERVICE_UNKNOWN],
+                             'group': _GROUP_TOOLS,
+                             },
     'test': {'env': _ENV_DEV,
              'service': [_SERVICE_TEST],
              'group': _GROUP_TEST,
