@@ -42,6 +42,11 @@ _SERVICE_WEBSERVER = 'Internal Webserver'
 _SERVICE_INTERNAL_SERVICES = 'Internal Services'
 _SERVICE_YOUTUBE_EXPORT = "Youtube Export"
 _SERVICE_KHANALYTICS = 'Khanalytics'
+_SERVICE_KA_SANDBOX = 'Sandbox'
+_SERVICE_CACHING_PROXY = 'Caching Proxy'
+_SERVICE_DOMAIN_REDIRECT = 'Domain Redirect'
+_SERVICE_PRODUCTION_RPC_SERVERS = 'Production RPC Servers'
+_SERVICE_PHABRICATOR = 'Phabricator'
 _SERVICE_TEST = 'Test'
 _GROUP_WEB = 'web'
 _GROUP_MOBILE = 'mobile'
@@ -77,6 +82,26 @@ MAP_RESOURCE_TO_ENV_SERVICE_AND_GROUP = {
                           },
     'khanalytics': {'env': _ENV_PROD,
                     'service': [_SERVICE_KHANALYTICS],
+                    'group': _GROUP_TOOLS,
+                    },
+    'sandbox': {'env': _ENV_PROD,
+                'service': [_SERVICE_KA_SANDBOX],
+                'group': _GROUP_WEB,
+                },
+    'caching-proxy': {'env': _ENV_PROD,
+                      'service': [_SERVICE_CACHING_PROXY],
+                      'group': _GROUP_TOOLS,
+                      },
+    'domain-redirect': {'env': _ENV_PROD,
+                        'service': [_SERVICE_DOMAIN_REDIRECT],
+                        'group': _GROUP_TOOLS,
+                        },
+    'production-rpc-servers': {'env': _ENV_PROD,
+                               'service': [_SERVICE_PRODUCTION_RPC_SERVERS],
+                               'group': _GROUP_TOOLS,
+                               },
+    'phabricator': {'env': _ENV_DEV,
+                    'service': [_SERVICE_PHABRICATOR],
                     'group': _GROUP_TOOLS,
                     },
     'test': {'env': _ENV_DEV,
