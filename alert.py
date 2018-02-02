@@ -64,12 +64,7 @@ def setup_parser():
                               'if missing we figure it out automatically. '
                               'May specify --cc and/or --bcc.'))
     parser.add_argument('--asana', default=[], action=_MakeList,
-                        help=('Make an asana task.  Argument is a comma-'
-                              'separated list of asana project-names '
-                              '(e.g. "Engineering support".) '
-                              'May specify --asana-tags; '
-                              'may specify --cc as a list of asana email '
-                              'addresses to add followers.'))
+                        help=('DEPRECATED: Use --bugtracker.'))
     parser.add_argument('--pagerduty', default=[], action=_MakeList,
                         help=('Send to PagerDuty.  Argument is a comma-'
                               'separated list of PagerDuty services. '
@@ -82,20 +77,27 @@ def setup_parser():
                               'separated list of statistics to update. '
                               'May specify --graphite_value and '
                               '--graphite_host.'))
-
     parser.add_argument('--stackdriver', default=[], action=_MakeList,
                         help=('Send to Stackdriver.  Argument is a comma-'
                               'separated list of metrics to update, with '
                               'metric-label-values separated by pipes like so:'
                               ' `logs.500|module=i18n`. '
                               'May specify --stackdriver_value'))
-
     parser.add_argument('--aggregator', default=[], action=_MakeList,
                         help=('Send to aggregator such as Alerta.io. Argument'
                               'is comma-separated list of initiatives.'
                               'Must specify --aggregator-resource and '
                               '--aggregator-event-name and may specify '
                               '--severity and/or --summary'))
+    parser.add_argument('--bugtracker', default=[], action=_MakeList,
+                        help=('Make issue in the bugtracker (right now that '
+                              'means Jira, though Asana is also an option). '
+                              'Argument is comma-separated list of initiatives'
+                              ' (e.g. "Infrastructure", "Test Prep") '
+                              'May specify --cc with emails of those '
+                              'who should be added as followers/watchers or '
+                              'add --bug-tags for adding tags/labels to issue'
+                              'May add --severity and/or --summary'))
 
     parser.add_argument('--summary', default=None,
                         help=('Summary used as subject lines for emails, etc. '
@@ -152,8 +154,8 @@ def setup_parser():
                         help=('A comma-separated list of email addresses; '
                               'used with --mail'))
 
-    parser.add_argument('--asana-tags', default=[], action=_MakeList,
-                        help=('A list of tags to tag this new task with'))
+    parser.add_argument('--bug-tags', default=[], action=_MakeList,
+                        help=('A list of tags to add to this new task/issue'))
 
     parser.add_argument('--graphite_value', default=1, type=float,
                         help=('Value to send to graphite for each of the '
@@ -223,8 +225,14 @@ def alert(message, args):
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
 
+    # TODO(jacqueline): The --asana flag is deprecated and all callers
+    # should be shifted to --bugtracker. Remove support for this tag when
+    # confirmed that there are no remaining callers using this flag.
     for project in args.asana:
-        a.send_to_asana(project, tags=args.asana_tags, followers=args.cc)
+        a.send_to_asana(project, tags=args.bug_tags, followers=args.cc)
+
+    for project in args.bugtracker:
+        a.send_to_bugtracker(project, labels=args.bug_tags, watchers=args.cc)
 
     if args.pagerduty:
         a.send_to_pagerduty(args.pagerduty)

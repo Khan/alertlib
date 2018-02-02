@@ -1,4 +1,13 @@
-"""Mixin for send_to_asana()."""
+"""Mixin for send_to_asana().
+
+This Mixin should now only be accessed via the send_to_bugtracker() Mixin
+rather than directly by callers in our codebase. Any changes to this
+Mixin's interface need to be in sync with the interface of bugtracker.
+
+TODO(jacqueline): If KA ever shifts back over to Asana, we'll need to
+add a BUGTRACKER_TO_ASANA_PROJ mapper to account for nuances in Asana
+project names.
+"""
 
 from __future__ import absolute_import
 import json
@@ -17,6 +26,7 @@ _LOG_PRIORITY_TO_ASANA_TAG = {
     logging.ERROR: 'P2',
     logging.CRITICAL: 'P1'
 }
+
 
 # Map string Asana project names to a list of int Asana project ids
 _CACHED_ASANA_PROJECT_MAP = {}

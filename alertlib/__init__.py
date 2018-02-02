@@ -66,6 +66,8 @@ from . import logs           # send_to_logs()
 from . import graphite       # send_to_graphite()
 from . import stackdriver    # send_to_stackdriver()
 from . import alerta         # send_to_alerta()
+from . import bugtracker     # send_to_bugtracker()
+from . import jira           # _send_to_jira()
 
 
 class Alert(hipchat.Mixin,
@@ -77,6 +79,8 @@ class Alert(hipchat.Mixin,
             graphite.Mixin,
             stackdriver.Mixin,
             alerta.Mixin,
+            jira.Mixin,
+            bugtracker.Mixin,
             BaseMixin):
     """An alert message that can be sent to multiple destinations."""
     # BaseMixin defines __init__.

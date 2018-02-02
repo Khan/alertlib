@@ -35,6 +35,7 @@ fake_secrets.google_alertlib_service_account = "{}"
 fake_secrets.sendgrid_low_priority_username = "<sendgrid username>"
 fake_secrets.sendgrid_low_priority_password = "<sendgrid password>"
 fake_secrets.alerta_api_key = '<alerta api key>'
+fake_secrets.jira_api_key = '<jira api key>'
 sys.modules['secrets'] = fake_secrets
 
 # We also want sendgrid to work.
@@ -57,6 +58,7 @@ ALERTLIB_MODULES = (
     'email',
     'graphite',
     'hipchat',
+    'jira',
     'logs',
     'pagerduty',
     'slack',
@@ -98,9 +100,11 @@ def force_use_of_sendmail():
 
 class MockResponse:
     """Mock of six.moves.urllib.request.Request with only necessary methods."""
-    def __init__(self, mock_read_val, mock_status_code):
-        self.mock_read_val = json.dumps({'data': mock_read_val})
+    def __init__(self, mock_read_val, mock_status_code, from_asana=False):
+        self.mock_read_val = json.dumps(mock_read_val)
         self.mock_status_code = mock_status_code
+        if from_asana:
+            self.mock_read_val = json.dumps({'data': mock_read_val})
 
     def read(self):
         return self.mock_read_val
@@ -128,6 +132,7 @@ class TestBase(unittest.TestCase):
         self.sent_to_graphite = []
         self.sent_to_stackdriver = []
         self.sent_to_alerta = []
+        self.sent_to_jira = []
 
         class FakeSendGridClient(object):
             def __init__(*args, **kwargs):
@@ -230,9 +235,9 @@ class TestBase(unittest.TestCase):
         """Used to unmock a function before the tests are ended."""
         self.mock(container, var_str, self.mock_origs[(container, var_str)])
 
-    def mock_urlopen(self, on_check_exists_vals=None, on_get_tags_vals=None,
-                     on_get_projects_vals=None, on_get_user_vals=None,
-                     on_post_vals=None):
+    def mock_asana_urlopen(self, on_check_exists_vals=None,
+                           on_get_tags_vals=None, on_get_projects_vals=None,
+                           on_get_user_vals=None, on_post_vals=None):
         """Remocks the urllib2 urlopen with the given response parameters.
 
         Each parameter is a tuple (read_val, status_code) if a response is
@@ -269,7 +274,7 @@ class TestBase(unittest.TestCase):
         on_get_user_vals = default_on_get_user_vals or on_get_user_vals
         on_post_vals = on_post_vals or default_on_post_vals
 
-        def new_mock_urlopen(request, data=None):
+        def new_mock_asana_urlopen(request, data=None):
             request_url = request.get_full_url()
             if 'completed' in request_url:
                 (mock_read_val, mock_status_code) = on_check_exists_vals
@@ -294,9 +299,73 @@ class TestBase(unittest.TestCase):
 
             if isinstance(mock_read_val, Exception):
                 raise mock_read_val
-            return MockResponse(mock_read_val, mock_status_code)
+            return MockResponse(mock_read_val, mock_status_code,
+                                from_asana=True)
 
-        self.mock(six.moves.urllib.request, 'urlopen', new_mock_urlopen)
+        self.mock(six.moves.urllib.request, 'urlopen', new_mock_asana_urlopen)
+
+    def mock_jira_urlopen(self, on_check_exists_vals=None,
+                          on_get_projects_vals=None, on_get_user_vals=None,
+                          on_post_issue_vals=None, on_post_watcher_vals=None):
+        """Remocks the urllib2 urlopen with the given response parameters.
+
+        Each parameter is a tuple (read_val, status_code) if a response is
+        expected. If an Exception is expected, the parameter is a tuple:
+        (Exception(message), 'Exception') where the second tuple element is
+        unused. If any of the parameters are None, the below default values
+        will be used (in general, at most one of these parameters is supplied
+        per test case).
+        """
+        default_on_check_exists_vals = ({'total': 0}, 200)
+        default_on_get_projects_vals = ([{'key': 'TEST'},
+                                        {'key': 'INFRA'}],
+                                        200)
+        default_on_get_user_vals = ([{'key': 'alex'}], 200)
+        default_on_post_issue_vals = ({'key': 'INFRA-1'}, 200)
+        default_on_post_watcher_vals = ([], 200)
+
+        on_check_exists_vals = (on_check_exists_vals or
+                                default_on_check_exists_vals)
+        on_get_projects_vals = (on_get_projects_vals or
+                                default_on_get_projects_vals)
+        on_get_user_vals = on_get_user_vals or default_on_get_user_vals
+        on_post_issue_vals = on_post_issue_vals or default_on_post_issue_vals
+        on_post_watcher_vals = (on_post_watcher_vals or
+                                default_on_post_watcher_vals)
+
+        def new_mock_jira_urlopen(request, data=None):
+            req_url = request.get_full_url()
+
+            if '/api/2/project' in req_url:
+                (mock_read_val, mock_status_code) = on_get_projects_vals
+            elif '/api/2/user/search?' in req_url:
+                (mock_read_val, mock_status_code) = on_get_user_vals
+            elif '/api/2/search?jql=' in req_url:
+                (mock_read_val, mock_status_code) = on_check_exists_vals
+            elif data is not None and 'api/2/issue/INFRA-1/watcher' in req_url:
+                (mock_read_val, mock_status_code) = on_post_watcher_vals
+                is_exception = isinstance(mock_read_val, Exception)
+                if not is_exception and mock_status_code < 300:
+                    self.sent_to_jira.append(json.loads(data))
+            elif data is not None and '/api/2/issue' in req_url:
+                (mock_read_val, mock_status_code) = on_post_issue_vals
+                is_exception = isinstance(mock_read_val, Exception)
+                if not is_exception and mock_status_code < 300:
+                    self.sent_to_jira.append(json.loads(data))
+            else:
+                raise Exception('Invalid Asana API url')
+
+            if six.PY3 and isinstance(data, six.text_type):
+                raise TypeError(
+                        'POST data should be bytes, an iterable of bytes, or '
+                        'a file object. It cannot be of type str.')
+
+            if isinstance(mock_read_val, Exception):
+                raise mock_read_val
+            return MockResponse(mock_read_val, mock_status_code,
+                                from_asana=False)
+
+        self.mock(six.moves.urllib.request, 'urlopen', new_mock_jira_urlopen)
 
 
 class HipchatTest(TestBase):
@@ -442,7 +511,7 @@ class HipchatTest(TestBase):
 class AsanaTest(TestBase):
 
     def test_tags_no_severity(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3']
@@ -465,7 +534,7 @@ class AsanaTest(TestBase):
                          self.sent_to_asana)
 
     def test_name_endswith_colon(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3']
@@ -488,7 +557,7 @@ class AsanaTest(TestBase):
                          self.sent_to_asana)
 
     def test_severity_no_tags(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         alert = alertlib.Alert('test message', summary='hi',
@@ -548,7 +617,7 @@ class AsanaTest(TestBase):
                          self.sent_to_asana)
 
     def test_severity_and_tags(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3', 'P1']
@@ -575,7 +644,7 @@ class AsanaTest(TestBase):
 
     def test_duplicate_task(self):
         on_check_exists_vals = ([{'name': 'hi', 'completed': False}], 200)
-        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+        self.mock_asana_urlopen(on_check_exists_vals=on_check_exists_vals)
 
         project_name = 'Engineering support'
         tag_names = ['P3']
@@ -584,7 +653,7 @@ class AsanaTest(TestBase):
         self.assertEqual([], self.sent_to_asana)
 
     def test_overloaded_tags(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['Evil tag']
@@ -610,7 +679,7 @@ class AsanaTest(TestBase):
         self.assertTrue(len(expected_tag_ids) > 1)
 
     def test_overloaded_project(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -636,7 +705,7 @@ class AsanaTest(TestBase):
         self.assertTrue(len(expected_project_ids) > 1)
 
     def test_valid_follower(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3', 'P1']
@@ -664,7 +733,7 @@ class AsanaTest(TestBase):
                          self.sent_to_asana)
 
     def test_invalid_follower(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3', 'P1']
@@ -696,7 +765,7 @@ class AsanaTest(TestBase):
         self.sent_to_error_log = []
 
     def test_invalid_project(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Invalid project name'
         tag_names = ['Evil tag']
@@ -708,7 +777,7 @@ class AsanaTest(TestBase):
         self.sent_to_error_log = []
 
     def test_all_invalid_tags(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Evil project'
         tag_names = ['llama', 'also llama']
@@ -739,7 +808,7 @@ class AsanaTest(TestBase):
         self.sent_to_error_log = []
 
     def test_some_invalid_tags(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3', 'llama']
@@ -766,7 +835,7 @@ class AsanaTest(TestBase):
         self.sent_to_error_log = []
 
     def test_no_summary(self):
-        self.mock_urlopen()
+        self.mock_asana_urlopen()
 
         project_name = 'Engineering support'
         tag_names = ['P3']
@@ -793,7 +862,7 @@ class AsanaTest(TestBase):
     # won't fail, but will make duplicate task
     def test_urlopen_exception_duplicate_on_check_exists(self):
         on_check_exists_vals = (Exception('Test failure'), 'Exception')
-        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+        self.mock_asana_urlopen(on_check_exists_vals=on_check_exists_vals)
 
         project_name = 'Engineering support'
         alert = alertlib.Alert('test message', summary='hi',
@@ -823,7 +892,7 @@ class AsanaTest(TestBase):
     # won't fail
     def test_urlopen_exception_no_duplicate_on_check_exists(self):
         on_check_exists_vals = (Exception('Test failure'), 'Exception')
-        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+        self.mock_asana_urlopen(on_check_exists_vals=on_check_exists_vals)
 
         project_name = 'Engineering support'
         alert = alertlib.Alert('test message', summary='hi',
@@ -852,7 +921,7 @@ class AsanaTest(TestBase):
 
     def test_urlopen_exception_on_get_tags(self):
         on_get_tags_vals = (Exception('Failed gettings tags'), 'Exception')
-        self.mock_urlopen(on_get_tags_vals=on_get_tags_vals)
+        self.mock_asana_urlopen(on_get_tags_vals=on_get_tags_vals)
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -873,7 +942,7 @@ class AsanaTest(TestBase):
     def test_urlopen_exception_on_get_projects(self):
         on_get_projects_vals = (Exception('Failed getting projects'),
                                 'Exception')
-        self.mock_urlopen(on_get_projects_vals=on_get_projects_vals)
+        self.mock_asana_urlopen(on_get_projects_vals=on_get_projects_vals)
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -891,7 +960,7 @@ class AsanaTest(TestBase):
 
     def test_urlopen_exception_on_post(self):
         on_post_vals = (Exception('Test failure'), 'Exception')
-        self.mock_urlopen(on_post_vals=on_post_vals)
+        self.mock_asana_urlopen(on_post_vals=on_post_vals)
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -911,7 +980,7 @@ class AsanaTest(TestBase):
     # won't fail, but will make duplicate task
     def test_urlopen_bad_status_code_duplicate_on_check_exists(self):
         on_check_exists_vals = ([{'name': 'hi', 'completed': False}], 400)
-        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+        self.mock_asana_urlopen(on_check_exists_vals=on_check_exists_vals)
 
         project_name = 'Engineering support'
         alert = alertlib.Alert('test message', summary='hi',
@@ -940,7 +1009,7 @@ class AsanaTest(TestBase):
     # won't fail
     def test_urlopen_bad_status_code_no_duplicate_on_check_exists(self):
         on_check_exists_vals = ([], 400)
-        self.mock_urlopen(on_check_exists_vals=on_check_exists_vals)
+        self.mock_asana_urlopen(on_check_exists_vals=on_check_exists_vals)
 
         project_name = 'Engineering support'
         alert = alertlib.Alert('test message', summary='hi',
@@ -976,7 +1045,7 @@ class AsanaTest(TestBase):
                             {'id': 3, 'name': 'Evil tag'},
                             {'id': 666, 'name': 'Auto generated'}],
                             400)
-        self.mock_urlopen(on_get_tags_vals=on_get_tags_vals)
+        self.mock_asana_urlopen(on_get_tags_vals=on_get_tags_vals)
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -1000,7 +1069,7 @@ class AsanaTest(TestBase):
                                  {'id': 2, 'name': 'Evil project'},
                                  {'id': 3, 'name': 'Evil project'}],
                                 400)
-        self.mock_urlopen(on_get_projects_vals=on_get_projects_vals)
+        self.mock_asana_urlopen(on_get_projects_vals=on_get_projects_vals)
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -1017,7 +1086,7 @@ class AsanaTest(TestBase):
 
     def test_urlopen_bad_status_code_on_post(self):
         on_post_vals = ([], 400)
-        self.mock_urlopen(on_post_vals=on_post_vals)
+        self.mock_asana_urlopen(on_post_vals=on_post_vals)
 
         project_name = 'Evil project'
         tag_names = ['Evil tag']
@@ -1032,6 +1101,286 @@ class AsanaTest(TestBase):
 
         self.assertEqual(expected_error_log,
                          self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+
+class JiraTest(TestBase):
+
+    def test_severity(self):
+        self.mock_jira_urlopen()
+
+        project_name = 'Test'
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.WARNING)
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '4'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+        self.sent_to_jira = []
+
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.ERROR)
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '3'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+        self.sent_to_jira = []
+
+        alert = alertlib.Alert('test message', summary='hi',
+                               severity=logging.CRITICAL)
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '2'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+
+    def test_add_new_label(self):
+        self.mock_jira_urlopen()
+
+        project_name = 'Test'
+        labels = ['test']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name, labels=labels)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['test', 'auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+
+    def test_add_new_misformatted_label(self):
+        self.mock_jira_urlopen()
+
+        project_name = 'Test'
+        labels = ['test with spaces']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name, labels=labels)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['test_with_spaces', 'auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+
+    def test_duplicate_issue(self):
+        on_check_exists_vals = ({'total': 1}, 200)
+        self.mock_jira_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Test'
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([], self.sent_to_jira)
+
+    def test_valid_watcher(self):
+        self.mock_jira_urlopen()
+
+        project_name = 'Test'
+        watchers = ['alex@ka.org']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name, watchers=watchers)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           },
+                          'alex'
+                          ],
+                         self.sent_to_jira)
+
+    def test_invalid_watcher(self):
+        on_get_user_vals = (None, 404)
+        self.mock_jira_urlopen(on_get_user_vals=on_get_user_vals)
+
+        project_name = 'Test'
+        watchers = ['not_alex@ka.org']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name, watchers=watchers)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           },
+                          ],
+                         self.sent_to_jira)
+        self.assertEqual([('Unable to find a Jira user associated with '
+                           'the email address: not_alex@ka.org',)],
+                         self.sent_to_warning_log)
+        self.sent_to_warning_log = []
+
+    def test_no_project_name(self):
+        self.mock_jira_urlopen()
+
+        project_name = None
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([], self.sent_to_jira)
+        self.assertEqual([('Invalid Jira project name or no name provided. '
+                           'Failed to send to Jira.',)],
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_invalid_project_name(self):
+        self.mock_jira_urlopen()
+
+        project_name = 'Invalid project name'
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([], self.sent_to_jira)
+        self.assertEqual([('Invalid Jira project name or no name provided. '
+                           'Failed to send to Jira.',)],
+                         self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_outdated_project_key(self):
+        on_get_projects_vals = ([{'key': 'INFRA'}], 200)
+        self.mock_jira_urlopen(on_get_projects_vals=on_get_projects_vals)
+
+        project_name = 'Test'
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([], self.sent_to_jira)
+        self.assertEqual([('This is no longer a valid Jira project key. The '
+                           'bugtracker to jira project map may need to '
+                           'be updated.',)], self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_no_summary(self):
+        self.mock_jira_urlopen()
+
+        project_name = 'Test'
+        alert = alertlib.Alert('test message')
+        # pdb.set_trace()
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['auto_generated'],
+                           'summary': 'test message',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+
+    # Won't fail, but will make duplicate task
+    def test_urlopen_exception_on_check_exists(self):
+        on_check_exists_vals = (Exception('Failed to check duplicates'),
+                                'Exception')
+        self.mock_jira_urlopen(on_check_exists_vals=on_check_exists_vals)
+
+        project_name = 'Test'
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ],
+                         self.sent_to_jira)
+        expected_error_log = [('Failed sending None to Jira: Failed to check '
+                               'duplicates',),
+                              ('Failed testing current issue for uniqueness. '
+                               'This issue might be created as a duplicate.',)]
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    # Won't fail
+    def test_urlopen_exception_on_get_projects(self):
+        on_get_projects_vals = (Exception('Failed to get projects'),
+                                'Exception')
+        self.mock_jira_urlopen(on_get_projects_vals=on_get_projects_vals)
+
+        project_name = 'Test'
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ], self.sent_to_jira)
+        expected_error_log = [('Failed sending None to Jira: Failed to get '
+                               'projects',),
+                              ('Unable to verify Jira project key. This issue '
+                               'may not be created successfully.',)]
+
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
+        self.sent_to_error_log = []
+
+    def test_urlopen_exception_on_post_watchers(self):
+        on_post_watcher_vals = (Exception('Failed adding watcher'),
+                                'Exception')
+        self.mock_jira_urlopen(on_post_watcher_vals=on_post_watcher_vals)
+
+        project_name = 'Test'
+        watchers = ['alex@ka.org']
+        alert = alertlib.Alert('test message', summary='hi')
+        alert._send_to_jira(project_name=project_name, watchers=watchers)
+        self.assertEqual([{'fields':
+                          {'project': {'key': 'TEST'},
+                           'issuetype': {'id': '10201'},
+                           'reporter': {'name': 'jirabot'},
+                           'priority': {'id': '5'},
+                           'labels': ['auto_generated'],
+                           'summary': 'hi',
+                           'description': 'test message'}
+                           }
+                          ], self.sent_to_jira)
+        expected_error_log = [('Failed sending "alex" to Jira: Failed adding '
+                               'watcher',)]
+
+        self.assertEqual(expected_error_log, self.sent_to_error_log)
         self.sent_to_error_log = []
 
 
