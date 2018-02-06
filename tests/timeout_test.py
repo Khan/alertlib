@@ -26,6 +26,9 @@ for module in alertlib_test.ALERTLIB_MODULES:
     importlib.import_module('alertlib.%s' % module)
 
 
+# TODO(benkraft): These tests print a bunch of ResourceWarnings, I think
+# because we don't wait on the processes after killing them, so we leave them
+# as zombies.  Fix.
 class TestTimeout(unittest.TestCase):
     def test_times_out(self):
         # TODO(csilvers): mock out the clock in some way for this?
@@ -42,14 +45,14 @@ class TestTimeout(unittest.TestCase):
 
     def test_kills_subprocesses(self):
         ps_output = subprocess.check_output(['ps', 'x'])
-        num_sleeps_before = ps_output.count('sleep 200')
+        num_sleeps_before = ps_output.count(b'sleep 200')
 
         rc = timeout.main(['1', 'sh', '-c', 'sleep 200'])
         self.assertEqual(124, rc)
 
         # This isn't a perfect test, but will probably work.
         ps_output = subprocess.check_output(['ps', 'x'])
-        num_sleeps_after = ps_output.count('sleep 200')
+        num_sleeps_after = ps_output.count(b'sleep 200')
         self.assertEqual(num_sleeps_before, num_sleeps_after)
 
     def test_kill_after(self):
@@ -59,7 +62,7 @@ class TestTimeout(unittest.TestCase):
             return
 
         ps_output = subprocess.check_output(['ps', 'x'])
-        num_sleeps_before = ps_output.count('sleep 200')
+        num_sleeps_before = ps_output.count(b'sleep 200')
 
         # We'll send a HUP (signal 1) to a process that ignores it,
         # and then send a real kill sometime after.
@@ -69,7 +72,7 @@ class TestTimeout(unittest.TestCase):
         self.assertEqual(124, rc)
 
         ps_output = subprocess.check_output(['ps', 'x'])
-        num_sleeps_after = ps_output.count('sleep 200')
+        num_sleeps_after = ps_output.count(b'sleep 200')
         self.assertEqual(num_sleeps_before, num_sleeps_after)
 
     def test_zero_timeout_always_fails(self):
