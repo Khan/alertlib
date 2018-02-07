@@ -17,10 +17,9 @@ import unittest
 # This makes it so we can find timeout when running from repo-root.
 sys.path.insert(1, '.')
 
+import alertlib_test  # must go first to set up mocks before 'import alertlib'
 import alertlib
 import timeout
-
-import alertlib_test
 
 for module in alertlib_test.ALERTLIB_MODULES:
     importlib.import_module('alertlib.%s' % module)

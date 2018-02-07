@@ -171,6 +171,11 @@ class TestBase(unittest.TestCase):
         # talk to the real world.
         self.mock_origs = {}   # used to unmock if needed
 
+        # We expect _TEST_MODE to be False (we do mocking instead).  In case
+        # someone else didn't clean up after themselves (*cough* timeout.py
+        # *cough*), set it as such.
+        self.mock(alertlib.base, '_TEST_MODE', False)
+
         self.mock(alertlib.hipchat, '_make_hipchat_api_call',
                   lambda post_dict: self.sent_to_hipchat.append(post_dict))
 
