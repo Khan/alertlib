@@ -58,7 +58,12 @@ def exit_test_mode():
 
 def secret(name):
     """Returns the value for the secret named `name`, or None."""
-    return getattr(secrets, name, None)
+    # If alertlib is being used within a kubernetes pod, it can access
+    # the secret directly from the env.
+    secret = getattr(secrets, name, None)
+    if not secret:
+        secret = os.environ.get(name.upper())
+    return secret
 
 
 def handle_encoding(string):
