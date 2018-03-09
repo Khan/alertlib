@@ -13,6 +13,7 @@ try:
     import httplib2
     import apiclient.discovery
     import oauth2client.client
+    import oauth2client.service_account
 except ImportError:
     stackdriver_not_allowed = (
             "ImportError occurred. Did you install the required libraries?"
@@ -29,12 +30,24 @@ _GOOGLE_API_CLIENT = None
 
 
 def _get_google_apiclient(google_creds):
-    """Build an http client authenticated with service account credentials."""
+    """Build an http client authenticated with service account credentials.
+
+    We support both the ancient (1.5-era) oauth2client, and the more
+    modern one.
+    """
     global _GOOGLE_API_CLIENT
     if _GOOGLE_API_CLIENT is None:
-        creds = oauth2client.client.SignedJwtAssertionCredentials(
-            google_creds['client_email'], google_creds['private_key'],
-            'https://www.googleapis.com/auth/monitoring')
+        try:
+            creds = (oauth2client.service_account.ServiceAccountCredentials.
+                     from_json_keyfile_dict(
+                         google_creds,
+                         ['https://www.googleapis.com/auth/monitoring']))
+        except AttributeError:
+            # Perhaps it's an old oauth2client, which doesn't support
+            # from_json_keyfile_dict.
+            creds = oauth2client.client.SignedJwtAssertionCredentials(
+                google_creds['client_email'], google_creds['private_key'],
+                'https://www.googleapis.com/auth/monitoring')
         http = creds.authorize(httplib2.Http())
         _GOOGLE_API_CLIENT = apiclient.discovery.build(
                 serviceName='monitoring',
