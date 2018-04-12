@@ -115,13 +115,15 @@ def setup_parser():
 
     parser.add_argument('--chat-sender', default=None,
                         help=('Who we say sent this chat message. '
-                              'In HipChat, defaults to AlertiGator. '
-                              "In Slack, defaults to whatever the webhook's "
-                              'default is, likely also AlertiGator.'))
+                              'In HipChat and with Slack bot tokens, defaults '
+                              'to AlertiGator.  With slack webhooks, defaults '
+                              "to whatever the webhook's default is, likely "
+                              'also AlertiGator.'))
     parser.add_argument('--icon-emoji', default=None,
                         help=('The emoji sender to use for this message. '
                               'Slack only.  Defaults to whatever the '
-                              "webhook's default is, likely :crocodile:"))
+                              "webhook's default is, or :crocodile: if "
+                              'using a bot token.'))
     parser.add_argument('--icon-url', default=None,
                         help=('The icon URL to use for this message. '
                               'Slack only.  Overridden by --icon-emoji.'))
@@ -143,6 +145,10 @@ def setup_parser():
                         help=('A list of slack attachment dicts, encoded as '
                               'json. Replaces `message` for sending to slack. '
                               '(See https://api.slack.com/docs/attachments.)'))
+    parser.add_argument('--slack-thread', default='[]',
+                        help=('A slack message timestamp to thread this with. '
+                              'Must be the timestamp of a toplevel message in '
+                              'the specified slack channel.'))
 
     parser.add_argument('--cc', default=[], action=_MakeList,
                         help=('A comma-separated list of email addresses; '
@@ -220,7 +226,8 @@ def alert(message, args):
                         intro=args.slack_intro,
                         icon_url=args.icon_url, icon_emoji=args.icon_emoji,
                         simple_message=args.slack_simple_message,
-                        attachments=json.loads(args.slack_attachments))
+                        attachments=json.loads(args.slack_attachments),
+                        thread=args.slack_thread)
 
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)

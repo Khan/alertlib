@@ -8,6 +8,10 @@ import six
 from . import base
 
 
+_DEFAULT_ICON_EMOJI = ':crocodile:'   # shhhhhh, it's an alligator
+_DEFAULT_USERNAME = 'AlertiGator'
+
+
 # 'good'=green, 'warning'=yellow, 'danger'=red, or use hex colors
 _LOG_PRIORITY_TO_SLACK_COLOR = {
     logging.DEBUG: "",  # blank = uses default color which is light grayish
@@ -18,25 +22,47 @@ _LOG_PRIORITY_TO_SLACK_COLOR = {
 }
 
 
-def _make_slack_webhook_post(payload_json):
+def _make_slack_webhook_post(payload):
     # This is a separate function just to make it easy to mock for tests.
-    webhook = base.secret('slack_alertlib_webhook_url')
-    req = six.moves.urllib.request.Request(webhook)
+    # Prefer the API token, if available; it supports thread_ts and other
+    # features that the webhook doesn't.
+    api_token = base.secret('slack_alertlib_api_token')
+    if api_token:
+        url = 'https://slack.com/api/chat.postMessage'
+        # However, the API token has one disadvantage: it doesn't use the bot's
+        # defaults for username/icon.  (It does if you use 'as_user', but that
+        # has other drawbacks -- you have to be invited to channels before you
+        # can post.)  So we modify the payload to add the defaults.  We could
+        # instead fetch the bot's actual name/icon via auth.test + users.info,
+        # but that's 2 extra API calls and hardcoded defaults are good enough.
+        payload.setdefault('username', _DEFAULT_USERNAME)
+        if 'icon_url' not in payload:
+            payload.setdefault('icon_emoji', _DEFAULT_ICON_EMOJI)
+    else:
+        url = base.secret('slack_alertlib_webhook_url')
+    req = six.moves.urllib.request.Request(url)
     req.add_header("Content-Type", "application/json")
-    res = six.moves.urllib.request.urlopen(req, payload_json.encode('utf-8'))
+    if api_token:
+        req.add_header("Authorization", 'Bearer %s' % api_token)
+    res = six.moves.urllib.request.urlopen(
+        req, json.dumps(payload).encode('utf-8'))
     if res.getcode() != 200:
         raise ValueError(res.read())
+    res_parsed = json.load(res)
+    if not res_parsed.get('ok'):
+        raise ValueError("Slack said: %s" % res_parsed.get('error', 'not ok'))
 
 
-def _post_to_slack(payload_json):
-    if not base.secret('slack_alertlib_webhook_url'):
-        logging.warning("Not sending to slack (no webhook url found): %s",
-                        payload_json)
+def _post_to_slack(payload):
+    if not (base.secret('slack_alertlib_webhook_url')
+            or base.secret('slack_alertlib_api_token')):
+        logging.warning("Not sending to slack (no webhook url or token "
+                        "found): %s", json.dumps(payload))
         return
     try:
-        _make_slack_webhook_post(payload_json)
+        _make_slack_webhook_post(payload)
     except Exception as e:
-        logging.error("Failed sending %s to slack: %s" % (payload_json, e))
+        logging.error("Failed sending %s to slack: %s" % (payload, e))
 
 
 class Mixin(base.BaseMixin):
@@ -55,7 +81,8 @@ class Mixin(base.BaseMixin):
                        unfurl_media,
                        icon_url,
                        icon_emoji,
-                       sender):
+                       sender,
+                       thread):
         payload = {"channel": channel, "link_names": link_names,
                    "unfurl_links": unfurl_links, "unfurl_media": unfurl_media}
         # hipchat has a 10,000 char limit on messages, we leave some leeway
@@ -70,6 +97,8 @@ class Mixin(base.BaseMixin):
             payload["icon_emoji"] = icon_emoji
         if sender:
             payload["username"] = sender
+        if thread:
+            payload["thread_ts"] = thread
 
         if simple_message:                          # "simple message" case
             payload["text"] = message
@@ -128,12 +157,14 @@ class Mixin(base.BaseMixin):
                       unfurl_media=True,
                       icon_url=None,
                       icon_emoji=None,
-                      sender=None):
+                      sender=None,
+                      thread=None):
         """Send the alert message to Slack.
 
-        This wraps a subset of the Slack API incoming webhook in order to
-        make it behave closer to the default expectations of an AlertLib user,
-        while still enabling customization of results.
+        This wraps a subset of the Slack API incoming webhook or
+        chat.postMessage API in order to make it behave closer to the default
+        expectations of an AlertLib user, while still enabling customization of
+        results.
 
         If the alert is HTML formatted, it will not be displayed correctly on
         Slack, but for now this method will only WARN in the logs rather than
@@ -197,12 +228,17 @@ class Mixin(base.BaseMixin):
             icon_url: URL to an image to use as the icon for this message.
 
             icon_emoji: Emoji to use as the icon for this message.
-                Default is to use the Slack integration's default setting,
-                which is likely :crocodile:.
+                Default is to use the Slack integration's default setting if
+                sending via a webhook, or :crocodile: for a bot token.
 
             sender: Name of the bot.
-                Default is to use the Slack integration's default setting,
-                which is likely "AlertiGator".
+                Default is to use the Slack integration's default setting if
+                sending via a webhook, or "AlertiGator" for a bot token.
+
+            thread: A message timestamp to thread this with, as a string.
+                This must be the slack message timestamp (e.g. "ts" in the
+                response to chat.postMessage) of a toplevel message in
+                "channel" (not a reply in a thread).
         """
         if not self._passed_rate_limit('slack'):
             return self
@@ -215,13 +251,13 @@ class Mixin(base.BaseMixin):
             channel, simple_message=simple_message, intro=intro,
             attachments=attachments, link_names=link_names,
             unfurl_links=unfurl_links, unfurl_media=unfurl_media,
-            icon_url=icon_url, icon_emoji=icon_emoji, sender=sender)
-        payload_json = json.dumps(payload)
+            icon_url=icon_url, icon_emoji=icon_emoji, sender=sender,
+            thread=thread)
 
         if self._in_test_mode():
             logging.info("alertlib: would send to slack channel %s: %s"
-                         % (channel, payload_json))
+                         % (channel, json.dumps(payload)))
         else:
-            _post_to_slack(payload_json)
+            _post_to_slack(payload)
 
         return self      # so we can chain the method calls

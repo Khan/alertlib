@@ -64,7 +64,7 @@ in the following format:
 
 ```
 hostedgraphite_api_key = "VALUE"
-slack_alertlib_webhook_url = "VALUE"
+slack_alertlib_api_token = "VALUE"
 asana_api_token = "VALUE"
 hipchat_alertlib_token = "VALUE"
 google_alertlib_service_account = '{}'
@@ -76,6 +76,12 @@ alerta_api_key = "VALUE"
 You only need to include the secrets for the services you are using.  If you set
 the environment variable `ALERTLIB_SECRETS_DIR`, alertlib will look for
 `secrets.py` in that directory, and will exit if it's not found.
+
+For Slack, we support either `slack_alertlib_api_token`, set to a bot's API
+token, or `slack_alertlib_webhook_url`, set to an incoming webhook's secret
+URL.  Most functionality may be used with either, but certain features are only
+supported with the API token.  For this reason we prefer the API token, if both
+are set.
 
 ### HTML formatting (for HipChat and email)
 Alert messages may contain HTML markup if you set the `html=True` parameter on
