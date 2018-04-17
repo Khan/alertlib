@@ -1392,7 +1392,7 @@ class JiraTest(TestBase):
 class SlackTest(TestBase):
     def test_default_options(self):
         alertlib.Alert('test message').send_to_slack('#bot-testing')
-        actual = json.loads(self.sent_to_slack[0])
+        actual = self.sent_to_slack[0]
         self.assertEqual(actual['channel'], '#bot-testing')
         self.assertEqual(len(actual['attachments']), 1)
         self.assertEqual(actual['attachments'][0]['text'], 'test message')
@@ -1402,7 +1402,7 @@ class SlackTest(TestBase):
         alertlib.Alert('test message').send_to_slack('#bot-testing',
                                                      sender='Bob Bot',
                                                      icon_emoji=':poop:')
-        actual = json.loads(self.sent_to_slack[0])
+        actual = self.sent_to_slack[0]
         self.assertEqual(actual['channel'], '#bot-testing')
         self.assertEqual(actual['username'], 'Bob Bot')
         self.assertEqual(actual['icon_emoji'], ':poop:')
@@ -1410,7 +1410,7 @@ class SlackTest(TestBase):
 
     def test_default_alert_with_summary(self):
         alertlib.Alert('xyz', summary='ABC').send_to_slack('#bot-testing')
-        actual = json.loads(self.sent_to_slack[0])
+        actual = self.sent_to_slack[0]
         self.assertEqual(len(actual['attachments']), 1)
         self.assertEqual(actual['attachments'][0]['pretext'], 'ABC')
         self.assertEqual(actual['attachments'][0]['text'], 'xyz')
@@ -1419,14 +1419,14 @@ class SlackTest(TestBase):
     def test_default_alert_with_severity(self):
         alertlib.Alert('test message', severity=logging.CRITICAL) \
             .send_to_slack('#bot-testing')
-        actual = json.loads(self.sent_to_slack[0])
+        actual = self.sent_to_slack[0]
         self.assertEqual(len(actual['attachments']), 1)
         self.assertEqual(actual['attachments'][0]['color'], 'danger')
 
     def test_simple_message(self):
         alertlib.Alert('test message') \
             .send_to_slack('#bot-testing', simple_message=True)
-        actual = json.loads(self.sent_to_slack[0])
+        actual = self.sent_to_slack[0]
         self.assertEqual(actual['text'], 'test message')
         self.assertIsNone(actual.get('attachments'))
 
@@ -1438,7 +1438,7 @@ class SlackTest(TestBase):
                 {"text": "hi dad", "color": "#abcdef"}
             ]
         )
-        actual = json.loads(self.sent_to_slack[0])
+        actual = self.sent_to_slack[0]
         self.assertEqual(actual.get('text'), '\n')
         self.assertEqual(len(actual['attachments']), 2)
         self.assertEqual(actual['attachments'][0]['text'], 'hi mom')
