@@ -145,7 +145,7 @@ def setup_parser():
                         help=('A list of slack attachment dicts, encoded as '
                               'json. Replaces `message` for sending to slack. '
                               '(See https://api.slack.com/docs/attachments.)'))
-    parser.add_argument('--slack-thread', default='[]',
+    parser.add_argument('--slack-thread', default=None,
                         help=('A slack message timestamp to thread this with. '
                               'Must be the timestamp of a toplevel message in '
                               'the specified slack channel.'))

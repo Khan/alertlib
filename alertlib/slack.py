@@ -48,9 +48,12 @@ def _make_slack_webhook_post(payload):
         req, json.dumps(payload).encode('utf-8'))
     if res.getcode() != 200:
         raise ValueError(res.read())
-    res_parsed = json.load(res)
-    if not res_parsed.get('ok'):
-        raise ValueError("Slack said: %s" % res_parsed.get('error', 'not ok'))
+    if api_token:
+        # For the API call, we get a response, which may mention an error.
+        res_parsed = json.load(res)
+        if not res_parsed.get('ok'):
+            raise ValueError(
+                "Slack said: %s" % res_parsed.get('error', 'not ok'))
 
 
 def _post_to_slack(payload):
