@@ -127,6 +127,10 @@ def setup_parser():
     parser.add_argument('--icon-url', default=None,
                         help=('The icon URL to use for this message. '
                               'Slack only.  Overridden by --icon-emoji.'))
+    parser.add_argument('--as-app', action='store_true', default=False,
+                        help=('Send to Slack as a Slack application. If '
+                              'using this option, must provide APP_BOT_TOKEN '
+                              'in secrets.'))
     parser.add_argument('--color', default=None,
                         choices=['yellow', 'red', 'green', 'purple',
                                  'gray', 'random'],
@@ -227,7 +231,8 @@ def alert(message, args):
                         icon_url=args.icon_url, icon_emoji=args.icon_emoji,
                         simple_message=args.slack_simple_message,
                         attachments=json.loads(args.slack_attachments),
-                        thread=args.slack_thread)
+                        thread=args.slack_thread,
+                        as_app=args.as_app)
 
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)

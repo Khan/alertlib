@@ -52,6 +52,8 @@ def _call_jira_api(endpoint, payload_json=None):
     req.add_header('Authorization', 'Basic %s' % jira_api_key)
     req.add_header('Content-Type', 'application/json')
     req.add_header('Accept', 'application/json')
+    if isinstance(payload_json, str):
+        payload_json = payload_json.encode('utf-8')
     res = six.moves.urllib.request.urlopen(req, payload_json)
     res_json = res.read()
 

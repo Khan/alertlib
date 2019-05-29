@@ -77,9 +77,10 @@ You only need to include the secrets for the services you are using.  If you set
 the environment variable `ALERTLIB_SECRETS_DIR`, alertlib will look for
 `secrets.py` in that directory, and will exit if it's not found.
 
-For Slack, we support either `slack_alertlib_api_token`, set to a bot's API
-token, or `slack_alertlib_webhook_url`, set to an incoming webhook's secret
-URL.  Most functionality may be used with either, but certain features are only
+For Slack, we support the following: `slack_alertlib_api_token` (set to a bot's
+API token), `APP_BOT_TOKEN` (set to bot oauth access token of a Slack app), or
+`slack_alertlib_webhook_url` (set to an incoming webhook's secret URL).
+Most functionality may be used with either, but certain features are only
 supported with the API token.  For this reason we prefer the API token, if both
 are set.
 

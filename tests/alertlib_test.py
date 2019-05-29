@@ -36,6 +36,7 @@ fake_secrets.sendgrid_low_priority_username = "<sendgrid username>"
 fake_secrets.sendgrid_low_priority_password = "<sendgrid password>"
 fake_secrets.alerta_api_key = '<alerta api key>'
 fake_secrets.jira_api_key = '<jira api key>'
+fake_secrets.APP_BOT_TOKEN = '<slack app bot token>'
 sys.modules['secrets'] = fake_secrets
 
 # We also want sendgrid to work.
@@ -66,6 +67,9 @@ ALERTLIB_MODULES = (
 )
 for module in ALERTLIB_MODULES:
     importlib.import_module('alertlib.%s' % module)
+# Create a mock for secrets so we can check when it is called
+alertlib.base.secret = mock.MagicMock(
+    side_effect=(lambda name: getattr(sys.modules['secrets'], name)))
 
 
 @contextlib.contextmanager
@@ -180,7 +184,7 @@ class TestBase(unittest.TestCase):
                   lambda post_dict: self.sent_to_hipchat.append(post_dict))
 
         self.mock(alertlib.slack, '_make_slack_webhook_post',
-                  lambda payload: self.sent_to_slack.append(payload))
+                  lambda payload, as_app: self.sent_to_slack.append(payload))
 
         self.mock(alertlib.email.google_mail, 'send_mail',
                   lambda **kwargs: self.sent_to_google_mail.append(kwargs))
@@ -1450,6 +1454,14 @@ class SlackTest(TestBase):
             .send_to_slack('#bot-testing')
         self.assertIn("Unsupported HTML msg being sent to Slack!: %s",
                       self.sent_to_warning_log[0])
+
+    def test_send_as_slack_app(self):
+        alertlib.Alert('test message') \
+            .send_to_slack('#bot-testing', as_app=True)
+        actual = self.sent_to_slack[0]
+        self.assertTrue(alertlib.base.secret.called)
+        self.assertEqual(actual.get('username'), None)
+        self.assertEqual(actual.get('icon_emoji'), None)
 
 
 # TODO(benkraft): It's really only the appengine tests that we can't run (since

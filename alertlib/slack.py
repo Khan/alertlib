@@ -22,22 +22,27 @@ _LOG_PRIORITY_TO_SLACK_COLOR = {
 }
 
 
-def _make_slack_webhook_post(payload):
+def _make_slack_webhook_post(payload, as_app):
     # This is a separate function just to make it easy to mock for tests.
-    # Prefer the API token, if available; it supports thread_ts and other
+    # Highest preference goes to sending as a Slack app, if one is provided.
+    # Then use the API token, if available; it supports thread_ts and other
     # features that the webhook doesn't.
-    api_token = base.secret('slack_alertlib_api_token')
+    api_token = (base.secret('APP_BOT_TOKEN') if as_app else
+                 base.secret('slack_alertlib_api_token'))
     if api_token:
         url = 'https://slack.com/api/chat.postMessage'
-        # However, the API token has one disadvantage: it doesn't use the bot's
-        # defaults for username/icon.  (It does if you use 'as_user', but that
-        # has other drawbacks -- you have to be invited to channels before you
-        # can post.)  So we modify the payload to add the defaults.  We could
-        # instead fetch the bot's actual name/icon via auth.test + users.info,
-        # but that's 2 extra API calls and hardcoded defaults are good enough.
-        payload.setdefault('username', _DEFAULT_USERNAME)
-        if 'icon_url' not in payload:
-            payload.setdefault('icon_emoji', _DEFAULT_ICON_EMOJI)
+        # If sent as a slack app, username and emoji are already pre-defined
+        if not as_app:
+            # However, the API token has one disadvantage: it doesn't use the
+            # bot's defaults for username/icon.  (It does if you use 'as_user',
+            # but that has other drawbacks -- you have to be invited to
+            # channels before you can post.)  So we modify the payload to add
+            # the defaults.  We could instead fetch the bot's actual name/icon
+            # via auth.test + users.info, but that's 2 extra API calls and
+            # hardcoded defaults are good enough.
+            payload.setdefault('username', _DEFAULT_USERNAME)
+            if 'icon_url' not in payload:
+                payload.setdefault('icon_emoji', _DEFAULT_ICON_EMOJI)
     else:
         url = base.secret('slack_alertlib_webhook_url')
     req = six.moves.urllib.request.Request(url)
@@ -56,14 +61,15 @@ def _make_slack_webhook_post(payload):
                 "Slack said: %s" % res_parsed.get('error', 'not ok'))
 
 
-def _post_to_slack(payload):
-    if not (base.secret('slack_alertlib_webhook_url')
-            or base.secret('slack_alertlib_api_token')):
+def _post_to_slack(payload, as_app):
+    if not (base.secret('slack_alertlib_webhook_url') or
+            base.secret('slack_alertlib_api_token') or
+            (as_app and base.secret('APP_BOT_TOKEN'))):
         logging.warning("Not sending to slack (no webhook url or token "
                         "found): %s", json.dumps(payload))
         return
     try:
-        _make_slack_webhook_post(payload)
+        _make_slack_webhook_post(payload, as_app=as_app)
     except Exception as e:
         logging.error("Failed sending %s to slack: %s" % (payload, e))
 
@@ -161,7 +167,8 @@ class Mixin(base.BaseMixin):
                       icon_url=None,
                       icon_emoji=None,
                       sender=None,
-                      thread=None):
+                      thread=None,
+                      as_app=False):
         """Send the alert message to Slack.
 
         This wraps a subset of the Slack API incoming webhook or
@@ -261,6 +268,6 @@ class Mixin(base.BaseMixin):
             logging.info("alertlib: would send to slack channel %s: %s"
                          % (channel, json.dumps(payload)))
         else:
-            _post_to_slack(payload)
+            _post_to_slack(payload, as_app=as_app)
 
         return self      # so we can chain the method calls
