@@ -14,6 +14,9 @@ try:
     import apiclient.discovery
     import oauth2client.client
     import oauth2client.service_account
+    # Work around https://github.com/tr2000/google-api-python-client/issues/225
+    logging.getLogger("oauth2client.util").addHandler(logging.StreamHandler())
+    logging.getLogger("oauth2client.util").setLevel(logging.ERROR)
 except ImportError:
     stackdriver_not_allowed = (
             "ImportError occurred. Did you install the required libraries?"
