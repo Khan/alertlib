@@ -13,7 +13,19 @@ try:
     import httplib2
     import apiclient.discovery
     import oauth2client.client
-    import oauth2client.service_account
+    try:
+        # This module is not defined for old oauth2client's.  That's fine.
+        from oauth2client import service_account
+        _GET_CREDENTIALS = lambda google_creds: (
+            service_account.ServiceAccountCredentials.from_json_keyfile_dict(
+                google_creds,
+                ['https://www.googleapis.com/auth/monitoring']))
+    except ImportError:
+        # How old oauth2client's get credentials.
+        _GET_CREDENTIALS = lambda google_creds: (
+            oauth2client.client.SignedJwtAssertionCredentials(
+                google_creds['client_email'], google_creds['private_key'],
+                'https://www.googleapis.com/auth/monitoring'))
     # Work around https://github.com/tr2000/google-api-python-client/issues/225
     logging.getLogger("oauth2client.util").addHandler(logging.StreamHandler())
     logging.getLogger("oauth2client.util").setLevel(logging.ERROR)
@@ -40,17 +52,7 @@ def _get_google_apiclient(google_creds):
     """
     global _GOOGLE_API_CLIENT
     if _GOOGLE_API_CLIENT is None:
-        try:
-            creds = (oauth2client.service_account.ServiceAccountCredentials.
-                     from_json_keyfile_dict(
-                         google_creds,
-                         ['https://www.googleapis.com/auth/monitoring']))
-        except AttributeError:
-            # Perhaps it's an old oauth2client, which doesn't support
-            # from_json_keyfile_dict.
-            creds = oauth2client.client.SignedJwtAssertionCredentials(
-                google_creds['client_email'], google_creds['private_key'],
-                'https://www.googleapis.com/auth/monitoring')
+        creds = _GET_CREDENTIALS(google_creds)
         http = creds.authorize(httplib2.Http())
         _GOOGLE_API_CLIENT = apiclient.discovery.build(
                 serviceName='monitoring',
