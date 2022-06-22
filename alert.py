@@ -98,6 +98,22 @@ def setup_parser():
                               'who should be added as followers/watchers or '
                               'add --bug-tags for adding tags/labels to issue'
                               'May add --severity and/or --summary'))
+    parser.add_argument('--github-sha', default=None,
+                        help=('The commit SHA to update the status of in '
+                              'Github.'))
+    parser.add_argument('--github-owner', default='Khan',
+                        help=('The owner of the repo to update.'))
+    parser.add_argument('--github-repo', default='webapp',
+                        help=('The repo to update.'))
+    parser.add_argument('--github-status', default=None,
+                        choices=['error', 'failure', 'pending', 'success'],
+                        help=('Provide a precise status for a Github commit. '
+                              'If not provided, will attempt to use Severity.'))
+    parser.add_argument('--github-target-url', default=None,
+                        help=('An associated target URL to attach to the '
+                              'commit status.'))
+    parser.add_argument('--github-context', default=None,
+                        help=('The name of the job reporting the status.'))
 
     parser.add_argument('--summary', default=None,
                         help=('Summary used as subject lines for emails, etc. '
@@ -237,6 +253,17 @@ def alert(message, args):
     if args.mail:
         a.send_to_email(args.mail, args.cc, args.bcc, args.sender_suffix)
 
+    if args.github_sha:
+        a.send_to_github_commit_status(
+            args.github_sha,
+            state=args.github_status,
+            target_url=args.github_target_url,
+            description=args.summary,
+            context=args.github_context,
+            owner=args.github_owner,
+            repo=args.github_repo,
+        )
+
     # TODO(jacqueline): The --asana flag is deprecated and all callers
     # should be shifted to --bugtracker. Remove support for this tag when
     # confirmed that there are no remaining callers using this flag.
@@ -265,7 +292,7 @@ def alert(message, args):
                               project=args.stackdriver_project,
                               ignore_errors=False)
 
-    # subject to change if we decide go the route of having an alert 
+    # subject to change if we decide go the route of having an alert
     # be exclusive to just one initiative
     for initiative in args.aggregator:
         a.send_to_alerta(initiative,
