@@ -62,7 +62,7 @@ class Mixin(base.BaseMixin):
 
         # If no state is provided then we attempt to use the severity
         if not state:
-            if self.severity in 'error':
+            if self.severity == 'error':
                 state = 'error'
             elif self.severity == 'critical':
                 state = 'failure'

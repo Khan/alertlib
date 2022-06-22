@@ -70,7 +70,7 @@ from . import stackdriver    # send_to_stackdriver()
 from . import alerta         # send_to_alerta()
 from . import bugtracker     # send_to_bugtracker()
 from . import jira           # _send_to_jira()
-from . import github         # send_to_send_to_github_commit_status()
+from . import github         # send_to_github_commit_status()
 
 
 class Alert(hipchat.Mixin,
