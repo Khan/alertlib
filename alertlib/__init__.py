@@ -13,6 +13,7 @@ USAGE:
        .send_to_logs(...)
        .send_to_graphite(...)
        .send_to_alerta(...)
+       .send_to_github_commit_status(...)
 
 or, if you don't like chaining:
    alert = alertlib.Alert("message")
@@ -31,6 +32,7 @@ The backends supported are:
     * KA Alerta account
     * Logs -- GAE logs on appengine, or syslogs on a unix box
     * Graphite -- update a counter to indicate this alert happened
+    * Github -- for updating a commit status in Github.
 
 You can send an alert to one or more of these.
 
@@ -68,6 +70,7 @@ from . import stackdriver    # send_to_stackdriver()
 from . import alerta         # send_to_alerta()
 from . import bugtracker     # send_to_bugtracker()
 from . import jira           # _send_to_jira()
+from . import github         # send_to_github_commit_status()
 
 
 class Alert(hipchat.Mixin,
@@ -81,6 +84,7 @@ class Alert(hipchat.Mixin,
             alerta.Mixin,
             jira.Mixin,
             bugtracker.Mixin,
+            github.Mixin,
             BaseMixin):
     """An alert message that can be sent to multiple destinations."""
     # BaseMixin defines __init__.

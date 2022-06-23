@@ -16,6 +16,7 @@ alert to any or all of:
   * Graphite/StatsD
   * Stackdriver (also known as Google Cloud Monitoring)
   * Alerta (alerting aggregator)
+  * Github Commit Status
 
 You must provide a decrypted `secrets.py` (from the webapp repo) to use
 these services.
@@ -54,7 +55,8 @@ alertlib.Alert("It's time for a walk!")                 \
    .send_to_logs(...)                                   \
    .send_to_graphite(...)                               \
    .send_to_stackdriver(...)                            \
-   .send_to_aggregator(...)
+   .send_to_aggregator(...)                             \
+   .send_to_github_commit_status(...)
 ```
 
 ### Secrets
@@ -71,6 +73,7 @@ google_alertlib_service_account = '{}'
 sendgrid_username = "VALUE"
 sendgrid_password = "VALUE"
 alerta_api_key = "VALUE"
+github_repo_status_deployment_pat = "VALUE"
 ```
 
 You only need to include the secrets for the services you are using.  If you set
@@ -83,6 +86,9 @@ API token), `APP_BOT_TOKEN` (set to bot oauth access token of a Slack app), or
 Most functionality may be used with either, but certain features are only
 supported with the API token.  For this reason we prefer the API token, if both
 are set.
+
+For Github, the `github_repo_status_deployment_pat` must be a personal access
+token that has at least the `repo:status` and `repo_deployment` scopes.
 
 ### HTML formatting (for HipChat and email)
 Alert messages may contain HTML markup if you set the `html=True` parameter on

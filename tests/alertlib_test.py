@@ -36,6 +36,7 @@ fake_secrets.sendgrid_low_priority_username = "<sendgrid username>"
 fake_secrets.sendgrid_low_priority_password = "<sendgrid password>"
 fake_secrets.alerta_api_key = '<alerta api key>'
 fake_secrets.jira_api_key = '<jira api key>'
+fake_secrets.github_repo_status_deployment_pat = '<github pat>'
 fake_secrets.APP_BOT_TOKEN = '<slack app bot token>'
 sys.modules['secrets'] = fake_secrets
 
@@ -64,6 +65,7 @@ ALERTLIB_MODULES = (
     'pagerduty',
     'slack',
     'stackdriver',
+    'github',
 )
 for module in ALERTLIB_MODULES:
     importlib.import_module('alertlib.%s' % module)
