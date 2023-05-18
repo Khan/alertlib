@@ -25,23 +25,44 @@ _SEVERITY_TO_JIRA_PRIORITY = {
 
 # Associates initiative names with their corresponding Jira project keys
 _BUGTRACKER_TO_JIRA_PROJ = {
-    "Classroom": "CLASS",
+    "Architecture": "ARCH",
+    "Teacher Experience": "CLASS",
+    "Content Library": "CL",
     "Content Platform": "CP",
+    "Data Infrastructure": "DI",
+    "Districts": "DIST",
+    "Frontend Infrastructure": "FEI",
+    "Guided Learning": "GL",
     "Infrastructure": "INFRA",
+    "Learning Components": "LC",
+    "Marketing & Philanthropy Product": "MPP",
+    "MPP": "MPP",
+
+    # These are deprecated and will be removed soon.
+    "Classroom": "CLASS",
     "Learning Platform": "LP",
     "Test Prep": "TP",
-    "Test": "TEST"
+
+    "Test": "TEST",
 }
 
 # Associates a Jira project key with an issue type ID for that project's
 # default issue type
 _PROJECT_TO_ISSUETYPE_ID = {
-    "CLASS": "10201",   # Support
-    "CP": "10201",      # Support
-    "INFRA": "10103",   # Bug
-    "LP": "10201",      # Support
-    "TP": "10201",      # Support
-    "TEST": "10201"     # Support
+    "ARCH": "10201",   # Support
+    "CLASS": "10201",  # Support
+    "CL": "10201",     # Support
+    "CP": "10201",     # Support
+    "DI": "10201",     # Support
+    "DIST": "10201",   # Support
+    "FEI": "10201",    # Support
+    "GL": "10201",     # Support
+    "INFRA": "10103",  # Bug
+    "LC": "10201",     # Support
+    "MPP": "10201",    # Support
+    "LP": "10201",     # Support
+    "TP": "10201",     # Support
+    "TEST": "10201",   # Support
 }
 
 
