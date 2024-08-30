@@ -32,7 +32,7 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Data Infrastructure": "DI",
     "Districts": "DIST",
     "Frontend Infrastructure": "FEI",
-    "Guided Learning": "GL",
+    "Tutor Platform": "TUT",
     "Infrastructure": "INFRA",
     "Learning Components": "LC",
     "Marketing & Philanthropy Product": "MPP",
@@ -42,7 +42,7 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Classroom": "CLASS",
     "Learning Platform": "LP",
     "Test Prep": "TP",
-
+    "Guided Learning": "GL",
     "Test": "TEST",
 }
 
@@ -63,6 +63,7 @@ _PROJECT_TO_ISSUETYPE_ID = {
     "LP": "10201",     # Support
     "TP": "10201",     # Support
     "TEST": "10201",   # Support
+    "TUTT": "10201",   # Support
 }
 
 
