@@ -63,7 +63,7 @@ _PROJECT_TO_ISSUETYPE_ID = {
     "LP": "10201",     # Support
     "TP": "10201",     # Support
     "TEST": "10201",   # Support
-    "TUTT": "10201",   # Support
+    "TUT": "10201",   # Support
 }
 
 
