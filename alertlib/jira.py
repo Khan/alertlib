@@ -37,6 +37,7 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Learning Components": "LC",
     "Marketing & Philanthropy Product": "MPP",
     "MPP": "MPP",
+    "Security": "SEC",
 
     # These are deprecated and will be removed soon.
     "Classroom": "CLASS",
@@ -46,24 +47,28 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Test": "TEST",
 }
 
+_ISSUETYPE_ID_SUPPORT = "10201"
+_ISSUETYPE_ID_BUG = "10103"
+
 # Associates a Jira project key with an issue type ID for that project's
 # default issue type
 _PROJECT_TO_ISSUETYPE_ID = {
-    "ARCH": "10201",   # Support
-    "CLASS": "10201",  # Support
-    "CL": "10201",     # Support
-    "CP": "10201",     # Support
-    "DI": "10201",     # Support
-    "DIST": "10201",   # Support
-    "FEI": "10201",    # Support
-    "GL": "10201",     # Support
-    "INFRA": "10103",  # Bug
-    "LC": "10201",     # Support
-    "MPP": "10201",    # Support
-    "LP": "10201",     # Support
-    "TP": "10201",     # Support
-    "TEST": "10201",   # Support
-    "TUT": "10201",   # Support
+    "ARCH": _ISSUETYPE_ID_SUPPORT,
+    "CLASS": _ISSUETYPE_ID_SUPPORT,
+    "CL": _ISSUETYPE_ID_SUPPORT,
+    "CP": _ISSUETYPE_ID_SUPPORT,
+    "DI": _ISSUETYPE_ID_SUPPORT,
+    "DIST": _ISSUETYPE_ID_SUPPORT,
+    "FEI": _ISSUETYPE_ID_SUPPORT,
+    "GL": _ISSUETYPE_ID_SUPPORT,
+    "INFRA": _ISSUETYPE_ID_BUG,
+    "LC": _ISSUETYPE_ID_SUPPORT,
+    "MPP": _ISSUETYPE_ID_SUPPORT,
+    "LP": _ISSUETYPE_ID_SUPPORT,
+    "SEC": _ISSUETYPE_ID_SUPPORT,
+    "TP": _ISSUETYPE_ID_SUPPORT,
+    "TEST": _ISSUETYPE_ID_SUPPORT,
+    "TUT": _ISSUETYPE_ID_SUPPORT,
 }
 
 
