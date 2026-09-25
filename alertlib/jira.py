@@ -32,11 +32,11 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Data Infrastructure": "DI",
     "Districts": "DIST",
     "Frontend Infrastructure": "FEI",
-    "Tutor Platform": "TUT",
     "Infrastructure": "INFRA",
     "Learning Components": "LC",
     "Marketing & Philanthropy Product": "MPP",
     "MPP": "MPP",
+    "Practice": "PRAC",
 
     # These are deprecated and will be removed soon.
     "Classroom": "CLASS",
@@ -44,6 +44,7 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Test Prep": "TP",
     "Guided Learning": "GL",
     "Test": "TEST",
+    "Tutor Platfor": "TUT",
 }
 
 # Associates a Jira project key with an issue type ID for that project's
@@ -63,7 +64,8 @@ _PROJECT_TO_ISSUETYPE_ID = {
     "LP": "10201",     # Support
     "TP": "10201",     # Support
     "TEST": "10201",   # Support
-    "TUT": "10201",   # Support
+    "TUT": "10201",    # Support
+    "PRAC": "10201",   # Support
 }
 
 
