@@ -35,6 +35,7 @@ _BUGTRACKER_TO_JIRA_PROJ = {
     "Infrastructure": "INFRA",
     "Learning Components": "LC",
     "Marketing & Philanthropy Product": "MPP",
+    "Motivation": "MOTIV",
     "MPP": "MPP",
     "Practice": "PRAC",
 
@@ -60,6 +61,7 @@ _PROJECT_TO_ISSUETYPE_ID = {
     "GL": "10201",     # Support
     "INFRA": "10103",  # Bug
     "LC": "10201",     # Support
+    "MOTIV": "10201"   # Support
     "MPP": "10201",    # Support
     "LP": "10201",     # Support
     "TP": "10201",     # Support
